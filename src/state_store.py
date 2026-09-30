@@ -14,7 +14,9 @@ class StateStore:
 
     Таблицы:
       processed_posts (owner_id, item_id, liked_at) — дедупликация;
-      sessions (id, started_at, ended_at, likes_count, session_date) — лимиты.
+      sessions (id, started_at, ended_at, likes_count, session_date, is_auto) — лимиты.
+      is_auto=1 — сессия запущена launchd (учитывается в дневном лимите).
+      is_auto=0 — ручной запуск через --no-limit (не учитывается в дневном лимите).
     """
 
     def __init__(self, config: AppConfig, logger: AppLogger):
@@ -40,10 +42,24 @@ class StateStore:
                 started_at INTEGER NOT NULL,
                 ended_at INTEGER,
                 likes_count INTEGER DEFAULT 0,
-                session_date TEXT NOT NULL
+                session_date TEXT NOT NULL,
+                is_auto INTEGER DEFAULT 1
             )
         """)
+        self._migrate_sessions_is_auto()
         self._conn.commit()
+
+    def _migrate_sessions_is_auto(self) -> None:
+        """Добавляет колонку is_auto в существующую таблицу sessions (миграция).
+
+        Старые БД (до --no-limit) не имеют колонки is_auto. PRAGMA table_info
+        проверяет наличие; ALTER TABLE добавляет с DEFAULT 1 — все прошлые
+        сессии помечаются как авто (корректно: они были запущены launchd).
+        """
+        cursor = self._conn.execute("PRAGMA table_info(sessions)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "is_auto" not in columns:
+            self._conn.execute("ALTER TABLE sessions ADD COLUMN is_auto INTEGER DEFAULT 1")
 
     def is_processed(self, owner_id: int, item_id: int) -> bool:
         """Проверяет, был ли пост уже обработан (лайкнут или пропущен)."""
@@ -61,13 +77,17 @@ class StateStore:
         )
         self._conn.commit()
 
-    def start_session(self) -> int:
-        """Создаёт запись о начале сессии, возвращает session_id."""
+    def start_session(self, is_auto: bool = True) -> int:
+        """Создаёт запись о начале сессии, возвращает session_id.
+
+        is_auto=True — учитывается в дневном лимите (запуск launchd).
+        is_auto=False — ручной запуск через --no-limit, не учитывается в лимите.
+        """
         now = int(time.time())
         today = date.today().isoformat()
         cursor = self._conn.execute(
-            "INSERT INTO sessions (started_at, session_date) VALUES (?, ?)",
-            (now, today),
+            "INSERT INTO sessions (started_at, session_date, is_auto) VALUES (?, ?, ?)",
+            (now, today, 1 if is_auto else 0),
         )
         self._conn.commit()
         return cursor.lastrowid or 0
@@ -82,19 +102,32 @@ class StateStore:
         self._conn.commit()
 
     def get_daily_stats(self) -> Tuple[int, int]:
-        """Возвращает (сессий сегодня, лайков сегодня) для проверки лимита."""
+        """Возвращает (авто-сессий сегодня, лайков в авто-сессиях сегодня).
+
+        Учитываются только сессии с is_auto=1 — ручные запуски через --no-limit
+        не расходуют дневной лимит.
+        """
         today = date.today().isoformat()
         cursor = self._conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions WHERE session_date = ?",
+            "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) "
+            "FROM sessions WHERE session_date = ? AND is_auto = 1",
             (today,),
         )
         row = cursor.fetchone()
         return (row[0], row[1])
 
     def get_total_stats(self) -> Tuple[int, int]:
-        """Возвращает (всего сессий, всего лайков)."""
+        """Возвращает (всего сессий, всего лайков) — все сессии, включая ручные."""
         cursor = self._conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions"
+        )
+        row = cursor.fetchone()
+        return (row[0], row[1])
+
+    def get_manual_stats(self) -> Tuple[int, int]:
+        """Возвращает (ручных сессий, лайков в ручных сессиях) — is_auto=0."""
+        cursor = self._conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions WHERE is_auto = 0"
         )
         row = cursor.fetchone()
         return (row[0], row[1])

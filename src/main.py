@@ -40,7 +40,12 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Доступные команды")
 
     subparsers.add_parser("login", help="Открыть браузер для ручного входа в VK (включая 2FA)")
-    subparsers.add_parser("run", help="Запустить сессию автолайкинга")
+    run_parser = subparsers.add_parser("run", help="Запустить сессию автолайкинга")
+    run_parser.add_argument(
+        "--no-limit",
+        action="store_true",
+        help="Не учитывать дневной лимит сессий (ручной запуск)",
+    )
     subparsers.add_parser("test", help="Тест поиска и лайка на одном посте")
     subparsers.add_parser("status", help="Показать статистику сессий и лайков")
     subparsers.add_parser("reset", help="Очистить базу состояния")
@@ -61,7 +66,7 @@ def main() -> None:
         if command == "login":
             liker.login()
         elif command == "run":
-            liker.run()
+            liker.run(no_limit=args.no_limit)
         elif command == "test":
             liker.test()
         elif command == "status":

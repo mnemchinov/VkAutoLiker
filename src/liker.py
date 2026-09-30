@@ -86,23 +86,33 @@ class AutoLiker:
 
         self._logger.info("=== Тест завершён ===")
 
-    def run(self) -> None:
-        """Основной цикл: сбор постов → лайки с рандомными задержками и лимитами."""
-        self._logger.info("=== Сессия AutoLiker запущена ===")
+    def run(self, no_limit: bool = False) -> None:
+        """Основной цикл: сбор постов → лайки с рандомными задержками и лимитами.
+
+        no_limit=True — ручной запуск (--no-limit): дневной лимит не проверяется,
+        сессия записывается с is_auto=False и не расходует дневной лимит.
+        no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
+        сессия записывается с is_auto=True.
+        """
+        if no_limit:
+            self._logger.info("=== Сессия AutoLiker запущена (без учёта лимита) ===")
+        else:
+            self._logger.info("=== Сессия AutoLiker запущена ===")
 
         self._browser.start()
         if not self._browser.is_logged_in():
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
             return
 
-        sessions_today, likes_today = self._state.get_daily_stats()
-        if sessions_today >= self._config.limits.sessions_per_day:
-            self._logger.info(
-                f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.limits.sessions_per_day})"
-            )
-            return
+        if not no_limit:
+            sessions_today, likes_today = self._state.get_daily_stats()
+            if sessions_today >= self._config.limits.sessions_per_day:
+                self._logger.info(
+                    f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.limits.sessions_per_day})"
+                )
+                return
 
-        session_id = self._state.start_session()
+        session_id = self._state.start_session(is_auto=not no_limit)
         likes_count = 0
         already_liked_count = 0
 
@@ -167,11 +177,17 @@ class AutoLiker:
             )
 
     def status(self) -> None:
-        """Выводит статистику сессий и лайков (за сегодня и всего)."""
+        """Выводит статистику сессий и лайков (за сегодня и всего).
+
+        Авто-сессии (launchd) и ручные (--no-limit) показываются раздельно.
+        """
         total_sessions, total_likes = self._state.get_total_stats()
-        sessions_today, likes_today = self._state.get_daily_stats()
+        auto_today, auto_likes_today = self._state.get_daily_stats()
+        manual_sessions, manual_likes = self._state.get_manual_stats()
         self._logger.info(
-            f"Статус: сегодня={sessions_today} сессий/{likes_today} лайков, "
+            f"Статус: авто сегодня={auto_today}/{self._config.limits.sessions_per_day} "
+            f"сессий/{auto_likes_today} лайков, "
+            f"ручных={manual_sessions} сессий/{manual_likes} лайков, "
             f"всего={total_sessions} сессий/{total_likes} лайков"
         )
 
