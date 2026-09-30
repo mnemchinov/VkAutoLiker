@@ -1,5 +1,14 @@
 # VkAutoLiker
 
+![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
+![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
+![Tests](https://img.shields.io/badge/tests-61%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-71%25-brightgreen?logo=pytest)
+![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
+![launchd](https://img.shields.io/badge/scheduling-launchd-lightgrey)
+![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 Консольное Python-приложение для автоматической постановки лайков в постах ВКонтакте
 по текстовым запросам, хештегам, стенам групп/пользователей, а также по стенам друзей
 и подписок текущего аккаунта.
