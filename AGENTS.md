@@ -90,6 +90,7 @@ pip install -r requirements.txt
 ```bash
 python src/main.py login    # 1-й шаг: открыть Chrome для ручного входа в VK (с 2FA), затем нажать Enter
 python src/main.py run      # 2-й шаг: основная сессия лайкинга
+python src/main.py run --no-limit  # ручной запуск без учёта дневного лимита (is_auto=0)
 python src/main.py test     # диагностика: проверка API-поиска + лайк на одном посте
 python src/main.py status   # статистика: сессии/лайки за сегодня и всего
 python src/main.py reset    # полная очистка SQLite-базы (обработанные посты и сессии)
@@ -183,8 +184,9 @@ pytest -m "not browser and not live"    # базовая страховка по
 7. **URL постов строятся на домене `vk.ru`** (`https://vk.ru/wall{owner_id}_{item_id}`),
    а API — `https://api.vk.ru/method`.
 8. **Лимиты применяются на двух уровнях:** дневные (`sessions_per_day`) до начала сессии и
-   пер-сесссионные (`likes_per_session`) внутри цикла. `finally` всегда закрывает сессию
-   в БД, включая `KeyboardInterrupt`.
+   пер-сесссионные (`likes_per_session`) внутри цикла. `--no-limit` обходит дневной лимит:
+   сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
+   `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `_collect_posts()`
    в `liker.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = likes_per_session * 2` считает только

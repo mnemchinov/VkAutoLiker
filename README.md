@@ -84,6 +84,7 @@ pip install -r requirements.txt
 ```bash
 python src/main.py login    # Первичный вход в VK (видимое окно, 2FA)
 python src/main.py run      # Основная сессия лайкинга
+python src/main.py run --no-limit  # Ручной запуск без учёта дневного лимита
 python src/main.py test     # Диагностика: поиск + лайк на одном посте
 python src/main.py status   # Статистика: сессии/лайки за сегодня и всего
 python src/main.py reset    # Очистка SQLite (обработанные посты и сессии)
