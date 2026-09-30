@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Точка входа CLI: login | run | test | status | reset."""
+
+import argparse
+import fcntl
+import sys
+from pathlib import Path
+from typing import TextIO
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from config import ConfigLoader
+from logger import AppLogger
+from liker import AutoLiker
+
+# Файл-блокировка: предотвращает двойной запуск (launchd может стартовать 2 процесса)
+_LOCK_FILE = Path(__file__).parent / ".autoliker.lock"
+
+
+def _acquire_lock() -> TextIO:
+    """Захватывает эксклюзивную блокировку. При неудаче — выход.
+
+    launchd иногда стартует процесс дважды в один слот. Без блокировки
+    второй процесс убивает Chrome первого через _kill_stale_chrome(),
+    после чего первый работает с мёртвой сессией (invalid session id).
+    """
+    lock_file = open(_LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file
+    except OSError:
+        print("Другой экземпляр уже запущен, выход.", file=sys.stderr)
+        sys.exit(0)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="VkAutoLiker — Selenium-based VK auto-liker")
+    parser.add_argument("--config", default="config.yaml", help="Path to config file")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    subparsers.add_parser("login", help="Open browser for manual VK login (including 2FA)")
+    subparsers.add_parser("run", help="Run auto-liker session")
+    subparsers.add_parser("test", help="Test search and like on a single post")
+    subparsers.add_parser("status", help="Show session/like statistics")
+    subparsers.add_parser("reset", help="Reset state database")
+
+    args = parser.parse_args()
+
+    command = args.command or "run"
+
+    lock = _acquire_lock()
+
+    liker: AutoLiker | None = None
+    try:
+        config_loader = ConfigLoader(args.config)
+        config = config_loader.load()
+        logger = AppLogger(config)
+        liker = AutoLiker(config, logger)
+
+        if command == "login":
+            liker.login()
+        elif command == "run":
+            liker.run()
+        elif command == "test":
+            liker.test()
+        elif command == "status":
+            liker.status()
+        elif command == "reset":
+            liker.reset()
+        else:
+            parser.print_help()
+            sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        if liker is not None:
+            liker.close()
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
+
+
+if __name__ == "__main__":
+    main()
