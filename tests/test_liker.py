@@ -30,6 +30,9 @@ def liker(mock_config, mock_logger):
 
     obj = AutoLiker(mock_config, mock_logger)
 
+    # Закрываем реальные подключения, созданные в AutoLiker.__init__
+    obj._state.close()
+    obj._api_client = MagicMock()
     obj._search_service = MagicMock()
     obj._likes_service = MagicMock()
     obj._state = MagicMock()
