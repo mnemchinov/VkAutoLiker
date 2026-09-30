@@ -186,6 +186,23 @@ class TestRun:
 
         liker._state.start_session.assert_not_called()
 
+    def test_no_limit_skips_daily_limit_check(self, liker, mock_config):
+        """no_limit=True — дневной лимит не проверяется, сессия создаётся."""
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._state.get_daily_stats = MagicMock(return_value=(mock_config.limits.sessions_per_day, 0))
+        liker._state.start_session = MagicMock(return_value=1)
+        liker._state.end_session = MagicMock()
+        liker._state.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._likes_service.is_liked = MagicMock(return_value=False)
+
+        with patch("liker.time.sleep"), patch.object(liker, "_collect_posts", return_value=[]):
+            liker.run(no_limit=True)
+
+        # get_daily_stats не вызывается при no_limit=True
+        liker._state.get_daily_stats.assert_not_called()
+        # start_session вызывается с is_auto=False
+        liker._state.start_session.assert_called_once_with(is_auto=False)
+
     def test_like_success_increments_count(self, liker, mock_config):
         """Успешный лайк → mark_processed, likes_count растёт."""
         posts = [_make_post(1, i) for i in range(3)]
