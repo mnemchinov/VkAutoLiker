@@ -6,6 +6,7 @@ from typing import Optional
 
 from config import AppConfig
 from logger import AppLogger
+from post import build_post_url
 from vk_browser import VKBrowser
 
 
@@ -22,13 +23,14 @@ class BrowserLikesService:
     """
 
     def __init__(self, browser: VKBrowser, config: AppConfig, logger: AppLogger):
+        """Инициализирует сервис лайков с браузером и конфигурацией."""
         self._browser = browser
         self._config = config
         self._logger = logger
 
     def is_liked(self, owner_id: int, item_id: int) -> bool:
         """Проверяет, стоит ли лайк на посте, по aria-label кнопки внутри контейнера поста."""
-        post_url = f"https://vk.ru/wall{owner_id}_{item_id}"
+        post_url = build_post_url(owner_id, item_id)
         self._browser.navigate(post_url)
 
         element = self._find_like_button(owner_id, item_id)
@@ -43,7 +45,7 @@ class BrowserLikesService:
 
         Возвращает True, если лайк подтвердился (aria-label сменился на «Убрать»).
         """
-        post_url = f"https://vk.ru/wall{owner_id}_{item_id}"
+        post_url = build_post_url(owner_id, item_id)
         self._logger.info(f"Переход на {post_url}")
         self._browser.navigate(post_url)
 

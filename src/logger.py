@@ -7,6 +7,7 @@ from config import AppConfig
 class AppLogger:
     """Обёртка над logging.Logger с консольным и файловым хендлерами."""
     def __init__(self, config: AppConfig, name: str = "vk_autoliker"):
+        """Инициализирует логгер с консольным и файловым хендлерами."""
         self._logger = logging.getLogger(name)
         self._logger.setLevel(getattr(logging, config.logging.level.upper(), logging.INFO))
         self._logger.propagate = False
@@ -28,20 +29,26 @@ class AppLogger:
         self._logger.addHandler(file_handler)
 
     def debug(self, msg: str) -> None:
+        """Логирует на уровне DEBUG."""
         self._logger.debug(msg)
 
     def info(self, msg: str) -> None:
+        """Логирует на уровне INFO."""
         self._logger.info(msg)
 
     def warning(self, msg: str) -> None:
+        """Логирует на уровне WARNING."""
         self._logger.warning(msg)
 
     def error(self, msg: str) -> None:
+        """Логирует на уровне ERROR."""
         self._logger.error(msg)
 
     def critical(self, msg: str) -> None:
+        """Логирует на уровне CRITICAL."""
         self._logger.critical(msg)
 
     @property
     def logger(self) -> logging.Logger:
+        """Возвращает обёрнутый logging.Logger."""
         return self._logger

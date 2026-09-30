@@ -115,18 +115,20 @@ class ConfigLoader:
     """Загружает конфигурацию из YAML-файла и кэширует результат."""
 
     def __init__(self, config_path: str = "config.yaml"):
+        """Инициализирует загрузчик с путём к YAML-файлу."""
         self._config_path = Path(config_path)
         self._config: Optional[AppConfig] = None
 
     def load(self) -> AppConfig:
+        """Загружает конфигурацию из YAML, кэширует и возвращает AppConfig."""
         if not self._config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {self._config_path}")
+            raise FileNotFoundError(f"Файл конфигурации не найден: {self._config_path}")
 
         with open(self._config_path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         if raw is None:
-            raise ValueError("Config file is empty")
+            raise ValueError("Файл конфигурации пуст")
 
         api_raw = raw.get("api", {})
         browser_raw = raw.get("browser", {})
@@ -183,6 +185,7 @@ class ConfigLoader:
 
     @property
     def config(self) -> AppConfig:
+        """Возвращает кэшированную конфигурацию (загружает при первом обращении)."""
         if self._config is None:
             return self.load()
         return self._config

@@ -29,6 +29,7 @@ class VKBrowser:
     """
 
     def __init__(self, config: AppConfig, logger: AppLogger):
+        """Инициализирует браузер с путём профиля и режимом headless из конфигурации."""
         self._profile_path = config.browser.profile_path
         self._headless = config.browser.headless
         self._logger = logger
@@ -63,6 +64,7 @@ class VKBrowser:
 
     @property
     def driver(self) -> WebDriver:
+        """Возвращает экземпляр WebDriver (выбрасывает RuntimeError, если не запущен)."""
         if self._driver is None:
             raise RuntimeError("Браузер не запущен. Сначала вызовите start().")
         return self._driver
@@ -87,6 +89,7 @@ class VKBrowser:
             pass
 
     def start(self) -> None:
+        """Запускает Chrome: завершает stale-процессы, создаёт driver."""
         if self._driver is not None:
             return
         self._kill_stale_chrome()
@@ -107,6 +110,7 @@ class VKBrowser:
         self._random_sleep(2, 5)
 
     def wait_for(self, css_selector: str, timeout: int = 10) -> bool:
+        """Ожидает появления элемента по CSS-селектору. True, если появился."""
         try:
             WebDriverWait(self.driver, timeout).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
@@ -116,6 +120,7 @@ class VKBrowser:
             return False
 
     def wait_for_clickable(self, css_selector: str, timeout: int = 10) -> bool:
+        """Ожидает кликабельности элемента по CSS-селектору."""
         try:
             WebDriverWait(self.driver, timeout).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, css_selector))
@@ -125,12 +130,15 @@ class VKBrowser:
             return False
 
     def find_elements(self, css_selector: str):
+        """Возвращает список элементов по CSS-селектору."""
         return self.driver.find_elements(By.CSS_SELECTOR, css_selector)
 
     def find_element(self, css_selector: str):
+        """Возвращает первый элемент по CSS-селектору."""
         return self.driver.find_element(By.CSS_SELECTOR, css_selector)
 
     def click(self, css_selector: str) -> bool:
+        """Кликает по элементу по CSS-селектору с прокруткой. True, если успешно."""
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, css_selector)
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
@@ -142,6 +150,7 @@ class VKBrowser:
             return False
 
     def click_element(self, element) -> bool:
+        """Кликает по переданному элементу с прокруткой. True, если успешно."""
         try:
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
             self._random_sleep(0.5, 1.5)
@@ -152,6 +161,7 @@ class VKBrowser:
             return False
 
     def get_attribute(self, css_selector: str, attribute: str) -> Optional[str]:
+        """Возвращает значение атрибута элемента по CSS-селектору. None, если не найден."""
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, css_selector)
             return el.get_attribute(attribute)
@@ -159,12 +169,15 @@ class VKBrowser:
             return None
 
     def get_page_source(self) -> str:
+        """Возвращает HTML-исходник текущей страницы."""
         return self.driver.page_source
 
     def current_url(self) -> str:
+        """Возвращает URL текущей страницы."""
         return self.driver.current_url
 
     def scroll_down(self, pixels: int = 800) -> None:
+        """Прокручивает страницу вниз на заданное число пикселей."""
         self.driver.execute_script(f"window.scrollBy(0, {pixels});")
         self._random_sleep(1, 3)
 
@@ -203,6 +216,7 @@ class VKBrowser:
         return False
 
     def close(self) -> None:
+        """Закрывает браузер и освобождает драйвер."""
         if self._driver is not None:
             self._driver.quit()
             self._driver = None
@@ -210,4 +224,5 @@ class VKBrowser:
 
     @staticmethod
     def _random_sleep(min_sec: float, max_sec: float) -> None:
+        """Пауза на случайную величину в диапазоне [min_sec, max_sec]."""
         time.sleep(random.uniform(min_sec, max_sec))

@@ -34,15 +34,16 @@ def _acquire_lock() -> TextIO:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="VkAutoLiker — Selenium-based VK auto-liker")
-    parser.add_argument("--config", default="config.yaml", help="Path to config file")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    """Точка входа CLI: парсит аргументы, создаёт AutoLiker, выполняет команду."""
+    parser = argparse.ArgumentParser(description="VkAutoLiker — автолайкер ВКонтакте")
+    parser.add_argument("--config", default="config.yaml", help="Путь к файлу конфигурации")
+    subparsers = parser.add_subparsers(dest="command", help="Доступные команды")
 
-    subparsers.add_parser("login", help="Open browser for manual VK login (including 2FA)")
-    subparsers.add_parser("run", help="Run auto-liker session")
-    subparsers.add_parser("test", help="Test search and like on a single post")
-    subparsers.add_parser("status", help="Show session/like statistics")
-    subparsers.add_parser("reset", help="Reset state database")
+    subparsers.add_parser("login", help="Открыть браузер для ручного входа в VK (включая 2FA)")
+    subparsers.add_parser("run", help="Запустить сессию автолайкинга")
+    subparsers.add_parser("test", help="Тест поиска и лайка на одном посте")
+    subparsers.add_parser("status", help="Показать статистику сессий и лайков")
+    subparsers.add_parser("reset", help="Очистить базу состояния")
 
     args = parser.parse_args()
 
@@ -71,10 +72,10 @@ def main() -> None:
             parser.print_help()
             sys.exit(1)
     except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"Ошибка: {e}", file=sys.stderr)
         sys.exit(1)
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"Ошибка: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         if liker is not None:

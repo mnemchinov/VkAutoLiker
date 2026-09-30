@@ -13,6 +13,7 @@ class VKApiError(Exception):
     """Ошибка VK API с кодом и сообщением."""
 
     def __init__(self, code: int, message: str):
+        """Создаёт ошибку с кодом VK API и сообщением."""
         self.code = code
         self.message = message
         super().__init__(f"VK API error {code}: {message}")
@@ -22,6 +23,7 @@ class CaptchaError(VKApiError):
     """VK API требует капчу (error_code 14). Останавливает сессию."""
 
     def __init__(self, message: str):
+        """Создаёт CaptchaError с code=14."""
         super().__init__(14, message)
 
 
@@ -39,6 +41,7 @@ class VKApiClient:
     _NETWORK_RETRY_DELAY = 5.0
 
     def __init__(self, config: AppConfig, logger: AppLogger):
+        """Инициализирует клиент с service-токеном и параметрами rate-лимита."""
         self._token = config.api.service_token
         self._api_version = config.api.api_version
         self._base_url = config.api.base_url
@@ -77,7 +80,7 @@ class VKApiClient:
                     )
                     time.sleep(self._NETWORK_RETRY_DELAY)
                     continue
-                raise VKApiError(0, f"Network error after {self._MAX_NETWORK_RETRIES} attempts: {e}")
+                raise VKApiError(0, f"Сетевая ошибка после {self._MAX_NETWORK_RETRIES} попыток: {e}")
 
             data = response.json()
 
@@ -95,9 +98,9 @@ class VKApiClient:
                         )
                         time.sleep(1)
                         continue
-                    raise VKApiError(code, f"Rate limit exceeded after {self._MAX_ERROR6_RETRIES} attempts: {msg}")
+                    raise VKApiError(code, f"Превышен лимит запросов после {self._MAX_ERROR6_RETRIES} попыток: {msg}")
                 elif code == 14:
-                    raise CaptchaError(f"Captcha required: {msg}")
+                    raise CaptchaError(f"Требуется капча: {msg}")
                 else:
                     raise VKApiError(code, msg)
 

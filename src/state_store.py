@@ -18,6 +18,7 @@ class StateStore:
     """
 
     def __init__(self, config: AppConfig, logger: AppLogger):
+        """Инициализирует SQLite-подключение и создаёт таблицы."""
         self._db_path = config.state.db_path
         self._logger = logger
         self._conn: sqlite3.Connection = sqlite3.connect(self._db_path)
@@ -99,11 +100,13 @@ class StateStore:
         return (row[0], row[1])
 
     def reset(self) -> None:
+        """Полностью очищает таблицы processed_posts и sessions."""
         self._conn.execute("DELETE FROM processed_posts")
         self._conn.execute("DELETE FROM sessions")
         self._conn.commit()
         self._logger.info("База данных очищена")
 
     def close(self) -> None:
+        """Закрывает SQLite-подключение."""
         if self._conn:
             self._conn.close()

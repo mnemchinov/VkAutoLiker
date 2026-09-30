@@ -13,6 +13,7 @@ class PostFilter:
     """Отсеивает посты старше days_back дней, уже обработанные и без текста."""
 
     def __init__(self, config: AppConfig, state_store: StateStore, logger: AppLogger):
+        """Инициализирует фильтр с параметром days_back и хранилищем состояния."""
         self._days_back = config.search.days_back
         self._state = state_store
         self._logger = logger

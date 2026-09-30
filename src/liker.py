@@ -23,6 +23,7 @@ class AutoLiker:
     """
 
     def __init__(self, config: AppConfig, logger: AppLogger):
+        """Создает все сервисы (DI через config + logger): API-клиент, поиск, браузер, лайки, состояние."""
         self._config = config
         self._logger = logger
 

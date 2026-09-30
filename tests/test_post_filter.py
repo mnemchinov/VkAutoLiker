@@ -1,7 +1,7 @@
 import time
 from typing import List
 
-from post import Post
+from post import Post, build_post_url
 from post_filter import PostFilter
 from state_store import StateStore
 
@@ -12,7 +12,7 @@ def make_post(owner_id: int, item_id: int, text: str = "text", days_ago: int = 0
         item_id=item_id,
         text=text,
         date=int(time.time()) - (days_ago * 86400),
-        url=f"https://vk.ru/wall{owner_id}_{item_id}",
+        url=build_post_url(owner_id, item_id),
     )
 
 

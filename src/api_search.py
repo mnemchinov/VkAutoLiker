@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from post import Post
+from post import Post, build_post_url
 from vk_api_client import VKApiClient, VKApiError
 from logger import AppLogger
 
@@ -15,6 +15,7 @@ class ApiSearchService:
     """
 
     def __init__(self, client: VKApiClient, logger: AppLogger):
+        """Инициализирует сервис поиска с VK API клиентом."""
         self._client = client
         self._logger = logger
 
@@ -172,7 +173,7 @@ class ApiSearchService:
             item_id=item_id,
             text=item.get("text", ""),
             date=item.get("date", 0),
-            url=f"https://vk.ru/wall{owner_id}_{item_id}",
+            url=build_post_url(owner_id, item_id),
         )
 
     @staticmethod
@@ -187,5 +188,5 @@ class ApiSearchService:
             item_id=item_id,
             text=item.get("text", ""),
             date=item.get("date", 0),
-            url=f"https://vk.ru/wall{owner_id}_{item_id}",
+            url=build_post_url(owner_id, item_id),
         )
