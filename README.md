@@ -167,17 +167,18 @@ vk_autoliker.stderr.log      — stderr launchd (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # все автотесты (без браузера и сети)
+pytest                                  # 62 passed, 2 skipped (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
 pytest tests/test_config.py -v          # конкретный файл
+pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
 ```
 
 Три уровня:
-1. **Mock WebDriver** — быстрые юнит-тесты, без браузера и сети
-2. **HTML-фикстура** — локальный `http.server` + headless Chrome против `vk_post.html`
-3. **Live** — e2e на реальном посте VK, запускается только вручную с `--vk-post=URL`
+1. **Mock WebDriver** (61 тест) — быстрые юнит-тесты, без браузера и сети
+2. **HTML-фикстура** (1 тест, маркер `browser`) — локальный `http.server` + headless Chrome против `vk_post.html`
+3. **Live** (2 теста, маркер `live`) — e2e на реальном посте VK; `pytest.skip` по умолчанию, запускаются только вручную после `python src/main.py login`
 
 Все пути к БД в тестах подменяются на `tmp_path` — реальная база не затрагивается.
 

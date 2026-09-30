@@ -109,19 +109,22 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # все автотесты (без браузера и сети)
+pytest                                  # 62 passed, 2 skipped (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_config.py -v          # конкретный файл
+pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
-- Тесты `tests/test_e2e.py` помечены `pytest.skip` и запускаются **только вручную**
+- Тесты `tests/test_e2e.py` (2 теста) помечены `pytest.skip` и запускаются **только вручную**
   после `login` (схема: `python src/main.py login && python src/main.py test`).
-- `tests/test_browser_fixture.py` поднимает локальный `http.server` на каталоге
-  `tests/fixtures/` и крутит headless-Chrome против `vk_post.html` — это единственный
-  способ проверить DOM-селекторы лайка без обращения к VK.
+  При обычном `pytest` они отображаются как `2 skipped` — это нормально.
+- `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
+  `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
+  — единственный способ проверить DOM-селекторы лайка без обращения к VK.
+- Юнит-тесты на моках — 61 тест, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтеров/форматтеров/CI в проекте нет)
