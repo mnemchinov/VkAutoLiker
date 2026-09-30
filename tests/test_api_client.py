@@ -39,12 +39,13 @@ class TestVKApiClient:
         error_response = MagicMock()
         error_response.json.return_value = {"error": {"error_code": 6, "error_msg": "Too many requests"}}
 
-        with patch("vk_api_client.requests.get", return_value=error_response):
+        with patch("vk_api_client.requests.get", return_value=error_response) as mock_get:
             with patch("vk_api_client.time.sleep"):
                 with pytest.raises(VKApiError) as exc_info:
                     client.call("newsfeed.search", {"q": "test"})
 
         assert exc_info.value.code == 6
+        assert mock_get.call_count == 3
 
     def test_call_error_code_14_raises_captcha(self, mock_config, mock_logger):
         client = VKApiClient(mock_config, mock_logger)

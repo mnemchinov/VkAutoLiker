@@ -196,7 +196,7 @@ class VKBrowser:
                     self._logger.warning(
                         f"Сетевая ошибка при проверке авторизации (попытка {attempt + 1}/{max_retries}): {e}"
                     )
-                    time.sleep(60)
+                    time.sleep(random.uniform(55, 65))
                 else:
                     self._logger.error(f"Не удалось проверить авторизацию после {max_retries} попыток: {e}")
                     return False

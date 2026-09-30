@@ -69,16 +69,17 @@ class VKApiClient:
 
             try:
                 response = requests.get(url, params=request_params, timeout=30)
-                data = response.json()
             except requests.exceptions.RequestException as e:
                 network_retries += 1
-                if network_retries <= self._MAX_NETWORK_RETRIES:
+                if network_retries < self._MAX_NETWORK_RETRIES:
                     self._logger.warning(
                         f"Сетевая ошибка (попытка {network_retries}/{self._MAX_NETWORK_RETRIES}): {e}"
                     )
                     time.sleep(self._NETWORK_RETRY_DELAY)
                     continue
-                raise VKApiError(0, f"Network error after {self._MAX_NETWORK_RETRIES} retries: {e}")
+                raise VKApiError(0, f"Network error after {self._MAX_NETWORK_RETRIES} attempts: {e}")
+
+            data = response.json()
 
             if "error" in data:
                 error = data["error"]
@@ -87,14 +88,14 @@ class VKApiClient:
 
                 if code == 6:
                     error6_retries += 1
-                    if error6_retries <= self._MAX_ERROR6_RETRIES:
+                    if error6_retries < self._MAX_ERROR6_RETRIES:
                         self._logger.warning(
                             f"Превышен лимит запросов, повтор через 1 сек "
                             f"(попытка {error6_retries}/{self._MAX_ERROR6_RETRIES}): {msg}"
                         )
                         time.sleep(1)
                         continue
-                    raise VKApiError(code, f"Rate limit exceeded after {self._MAX_ERROR6_RETRIES} retries: {msg}")
+                    raise VKApiError(code, f"Rate limit exceeded after {self._MAX_ERROR6_RETRIES} attempts: {msg}")
                 elif code == 14:
                     raise CaptchaError(f"Captcha required: {msg}")
                 else:
