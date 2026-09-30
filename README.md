@@ -34,6 +34,7 @@ VK API (сбор постов с реальными датами)
 - **PyYAML** — конфигурация
 - **SQLite** — состояние (стандартная `sqlite3`)
 - **pytest 8.x** — тесты
+- **fcntl** — file lock для защиты от двойного запуска (launchd)
 
 ## Установка
 
@@ -120,6 +121,9 @@ python src/main.py reset    # Очистка SQLite (обработанные п
 - `likes_per_session: 30`, `sessions_per_day: 3` — ~90 лайков/день (безопасный лимит)
 - Стоп при `max_captcha_streak` капч подряд
 - Закрытые стены (API error 15) и приватные профили (error 30) пропускаются без краша
+- **Защита от двойного запуска:** `fcntl.flock` в `main.py` — второй процесс (от launchd) завершается сразу
+- **Retry при сбоях сети:** `is_logged_in()` и `VKApiClient.call()` повторяют запрос 3 раза с паузой
+- **Error 6 (rate limit):** цикл с max 3 ретраев вместо рекурсии
 
 ## Структура проекта
 
@@ -128,16 +132,16 @@ config.yaml                  — единственная точка настр�
 pytest.ini                   — маркеры browser / live
 requirements.txt             — зависимости
 src/                         — весь код (плоская структура, без __init__.py)
-  main.py                    — CLI: login | run | test | status | reset
+  main.py                    — CLI: login | run | test | status | reset + fcntl file lock
   liker.py                   — AutoLiker: оркестратор цикла
   config.py                  — AppConfig + ConfigLoader (dataclass-модели)
   logger.py                  — AppLogger (обёртка над logging)
   post.py                    — Post dataclass (owner_id, item_id, text, date, url)
-  vk_api_client.py           — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
+  vk_api_client.py           — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи (error 6, network)
   api_search.py              — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
   post_filter.py             — PostFilter: давность / дубли / пустой текст
-  vk_browser.py              — VKBrowser: Selenium Chrome + антидетект
-  browser_likes.py           — BrowserLikesService: клик по лайку + верификация
+  vk_browser.py              — VKBrowser: Selenium Chrome + антидетект + network retry
+  browser_likes.py           — BrowserLikesService: клик по лайку + верификация (data-post-id)
   state_store.py             — StateStore: SQLite (processed_posts, sessions)
 tests/                       — pytest-тесты
   conftest.py                — фикстуры (mock_config, mock_logger, tmp_db, …)
@@ -154,6 +158,11 @@ tests/                       — pytest-тесты
 chrome_profile/              — профиль Chrome (в .gitignore)
 vk_autoliker.db              — SQLite база (в .gitignore)
 vk_autoliker.log             — логи (в .gitignore)
+vk_autoliker.stderr.log      — stderr launchd (в .gitignore)
+.autoliker.lock              — file lock от двойного запуска (в .gitignore)
+AGENTS.md                    — инструкции для ИИ-агента
+CONSTITUTION.md              — формализованные инварианты проекта
+README.md                    — документация проекта
 ```
 
 ## Тесты
@@ -187,6 +196,32 @@ launchctl list | grep vkautoliker                               # статус
 `RunAtLoad: false` — лишние запуски при логине исключены.
 `sessions_per_day: 3` в коде — страховка от 4-й сессии.
 `headless: true` — окно Chrome не появляется.
+
+## Формат коммитов
+
+```
+<тип>: <описание>
+```
+
+- **тип** (по стандарту Conventional Commits):
+    - `feat` — новая функциональность (новое поле, метод, endpoint)
+    - `fix` — исправление бага
+    - `docs` — документация
+    - `refactor` — рефакторинг
+    - `chore` — закрытые задачи, настройки, CI, зависимости
+    - `test` — тесты
+    - `perf` — улучшение производительности
+- **описание**: с заглавной буквы, краткая суть на русском
+
+Примеры:
+
+```
+feat: Переработка Dao с Criteria API на хранимую процедуру
+fix: Исправлена ошибка с limit=0 при экспорте через gRPC
+test: Добавлена стадия интеграционных тестов в CI с Testcontainers и DinD
+chore: Прото
+chore: upd proto
+```
 
 ## Ограничения
 
