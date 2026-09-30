@@ -22,9 +22,8 @@
 | Чтение/поиск | VK REST API (service-токен) | Поиск постов, стены, друзья, подписки, даты |
 | Лайки | Selenium + Chrome (персистентный профиль) | Клик по кнопке лайка в DOM |
 
-**Причина:** service-токен VK API не поддерживает метод `likes.add` (error 28).
-Community-токены — error 27. Выдача user-токенов с правом `wall` отключена с июня 2024.
-Поэтому лайки ставятся только через браузер, а весь поиск и фильтрация — через API.
+**Причина:** service-токен VK API не поддерживает `likes.add`, поэтому лайки ставятся
+только через браузер, а весь поиск и фильтрация — через API.
 
 **Цепочка данных:**
 ```
@@ -42,7 +41,7 @@ VK API (сбор постов с реальными датами)
 - **requests** — HTTP-клиент VK API
 - **PyYAML** — конфигурация
 - **SQLite** — состояние (стандартная `sqlite3`)
-- **pytest 8.x** — тесты
+- **pytest 8.x** + pytest-cov — тесты и покрытие
 - **fcntl** — file lock для защиты от двойного запуска (launchd)
 
 ## Установка
@@ -111,7 +110,7 @@ python src/main.py reset    # Очистка SQLite (обработанные п
 
 ## Фильтрация
 
-- **Давность:** посты старше `days_back` дней отбрасываются (дата из API, не `time.time()`)
+- **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
 - **Дедупликация:** `is_processed(owner_id, item_id)` в SQLite — пост помечается
   обработанным при успехе, ошибке или исключении
 - **Пустой текст:** посты без текста пропускаются
@@ -121,18 +120,11 @@ python src/main.py reset    # Очистка SQLite (обработанные п
 ## Антидетект
 
 - Персистентный Chrome-профиль — VK видит того же пользователя, что и при ручном входе
-- Реальный Chrome User-Agent и заголовки
-- Все задержки рандомизируются через `random.uniform(min, max)`:
-  - Пауза между лайками: 15–60 сек
-  - «Чтение» поста перед лайком: 5–15 сек
-- Порядок постов случайный внутри каждого источника
+- Все задержки рандомизируются: пауза между лайками 15–60 сек, «чтение» поста 5–15 сек
 - Друзья/группы — случайная выборка каждую сессию
-- `likes_per_session: 30`, `sessions_per_day: 3` — ~90 лайков/день (безопасный лимит)
-- Стоп при `max_captcha_streak` капч подряд
-- Закрытые стены (API error 15) и приватные профили (error 30) пропускаются без краша
-- **Защита от двойного запуска:** `fcntl.flock` в `main.py` — второй процесс (от launchd) завершается сразу
-- **Retry при сбоях сети:** `is_logged_in()` и `VKApiClient.call()` повторяют запрос 3 раза с паузой
-- **Error 6 (rate limit):** цикл с max 3 ретраев вместо рекурсии
+- ~90 лайков/день (3 сессии × 30 лайков) — безопасный лимит
+- Защита от двойного запуска через `fcntl.flock`
+- Retry при сбоях сети в `is_logged_in()` и `VKApiClient.call()`
 
 ## Структура проекта
 
@@ -145,8 +137,8 @@ src/                         — весь код (плоская структу�
   liker.py                   — AutoLiker: оркестратор цикла
   config.py                  — AppConfig + ConfigLoader (dataclass-модели)
   logger.py                  — AppLogger (обёртка над logging)
-  post.py                    — Post dataclass (owner_id, item_id, text, date, url)
-  vk_api_client.py           — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи (error 6, network)
+  post.py                    — Post dataclass + build_post_url()
+  vk_api_client.py           — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py              — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
   post_filter.py             — PostFilter: давность / дубли / пустой текст
   vk_browser.py              — VKBrowser: Selenium Chrome + антидетект + network retry
@@ -160,6 +152,7 @@ tests/                       — pytest-тесты
   test_browser_likes.py      — тесты BrowserLikesService (mock WebDriver)
   test_browser_fixture.py    — тесты против локального HTML (маркер browser)
   test_config.py             — тесты ConfigLoader
+  test_liker.py              — тесты AutoLiker (mock всех зависимостей)
   test_post_filter.py        — тесты PostFilter
   test_state_store.py        — тесты StateStore
   test_vk_browser.py         — тесты VKBrowser.is_logged_in()
@@ -169,9 +162,6 @@ vk_autoliker.db              — SQLite база (в .gitignore)
 vk_autoliker.log             — логи (в .gitignore)
 vk_autoliker.stderr.log      — stderr launchd (в .gitignore)
 .autoliker.lock              — file lock от двойного запуска (в .gitignore)
-AGENTS.md                    — инструкции для ИИ-агента
-CONSTITUTION.md              — формализованные инварианты проекта
-README.md                    — документация проекта
 ```
 
 ## Тесты
@@ -205,38 +195,3 @@ launchctl list | grep vkautoliker                               # статус
 `RunAtLoad: false` — лишние запуски при логине исключены.
 `sessions_per_day: 3` в коде — страховка от 4-й сессии.
 `headless: true` — окно Chrome не появляется.
-
-## Формат коммитов
-
-```
-<тип>: <описание>
-```
-
-- **тип** (по стандарту Conventional Commits):
-    - `feat` — новая функциональность (новое поле, метод, endpoint)
-    - `fix` — исправление бага
-    - `docs` — документация
-    - `refactor` — рефакторинг
-    - `chore` — закрытые задачи, настройки, CI, зависимости
-    - `test` — тесты
-    - `perf` — улучшение производительности
-- **описание**: с заглавной буквы, краткая суть на русском
-
-Примеры:
-
-```
-feat: Переработка Dao с Criteria API на хранимую процедуру
-fix: Исправлена ошибка с limit=0 при экспорте через gRPC
-test: Добавлена стадия интеграционных тестов в CI с Testcontainers и DinD
-chore: Прото
-chore: upd proto
-```
-
-## Ограничения
-
-- `likes.add` недоступен через VK API ни с одним типом токена — только браузер
-- `wall.search` возвращает 0 результатов с service-токеном (нужен user-токен)
-- Service-токен: 10 000 вызовов/мес без верификации (~9 360 при текущих настройках)
-- При истёкшей сессии Chrome `run`/`test` выведут: «Нет авторизации. Сначала выполните команду 'login'.»
-- VK — React SPA: селекторы лайка основаны на `aria-label` и `data-post-id`,
-  могут измениться при обновлении фронтенда VK
