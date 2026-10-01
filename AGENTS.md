@@ -51,7 +51,7 @@ src/                   — весь код, плоская структура Б
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
   vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: days_back, пустой текст (без StateStore)
+  post_filter.py       — PostFilter: days_back, пустой текст, стоп-слова (без StateStore)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
@@ -114,12 +114,12 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 79 passed, 2 skipped (live пропускаются)
+pytest                                  # 84 passed, 3 deselected (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_config.py -v          # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -129,7 +129,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — ~75 тестов, маркер не нужен.
+- Юнит-тесты на моках — ~84 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтеров/форматтеров/CI в проекте нет)
@@ -197,7 +197,7 @@ pytest -m "not browser and not live"    # базовая страховка по
    в `stage_collect.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
    необработанные посты, иначе нижестоящие источники пропускались бы зря.
-   `PostFilter` больше не зависит от `StateStore` — проверяет только `days_back` и пустой текст.
+    `PostFilter` больше не зависит от `StateStore` — проверяет только `days_back`, пустой текст и стоп-слова.
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,

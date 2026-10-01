@@ -21,7 +21,7 @@ description: Перед написанием или правкой тестов.
 | `TestConfigLoader` | `test_config.py` | Чтение YAML, дефолты, валидация |
 | `TestVKApiClient` | `test_api_client.py` | Rate-limit, ретраи, error 6/14, сетевые ошибки |
 | `TestApiSearchService` | `test_api_search.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
-| `TestPostFilter` | `test_post_filter.py` | days_back, дубли, пустой текст |
+| `TestPostFilter` | `test_post_filter.py` | days_back, дубли, пустой текст, стоп-слова |
 | `TestStateStore` | `test_state_store.py` | INSERT OR IGNORE, is_processed, сессии |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
 | `TestVKBrowserIsLoggedIn` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай |

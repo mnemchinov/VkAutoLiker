@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-75%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
@@ -151,6 +151,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `max_friends_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
 | `max_groups_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
 | `days_back` | `30` | — | Не лайкать посты старше N дней |
+| `stop_words` | `[]` | `["политика", "18+"]` | Стоп-слова: посты с этими словами не лайкаются (регистронезависимо) |
 
 ### `limits` — лимиты и задержки
 
@@ -195,6 +196,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 ## Фильтрация
 
 - **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
+- **Стоп-слова:** посты, содержащие слова из `stop_words` (в любом регистре), отбрасываются
 - **Дедупликация:** `is_processed(owner_id, item_id)` в SQLite — пост помечается
   обработанным при успехе, ошибке или исключении
 - **Пустой текст:** посты без текста пропускаются
@@ -303,11 +305,11 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 75 passed, 2 skipped (live-тесты пропускаются)
+pytest                                  # 84 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
-pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
 ```
 
 Три уровня:
