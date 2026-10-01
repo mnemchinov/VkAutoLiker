@@ -16,8 +16,9 @@ class PostFilter:
     """Отсеивает посты старше days_back дней и без текста."""
 
     def __init__(self, config: AppConfig, logger: AppLogger):
-        """Инициализирует фильтр с параметром days_back."""
+        """Инициализирует фильтр с параметром days_back и стоп-словами."""
         self._days_back = config.search.days_back
+        self._stop_words = [w.lower() for w in config.search.stop_words]
         self._logger = logger
 
     def filter(self, posts: List[Post]) -> List[Post]:
@@ -30,6 +31,11 @@ class PostFilter:
                 continue
 
             if not post.text.strip():
+                continue
+
+            if self._stop_words and any(
+                w in post.text.lower() for w in self._stop_words
+            ):
                 continue
 
             result.append(post)

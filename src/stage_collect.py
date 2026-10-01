@@ -5,7 +5,7 @@ auto_friends → auto_groups. Каждый следующий источник �
 если предыдущие не набрали enough постов.
 
 Внутри каждого источника посты шафлятся (random.shuffle) перед добавлением.
-Фильтрация: PostFilter (days_back + пустой текст) + StateStore (is_processed).
+Фильтрация: PostFilter (days_back + пустой текст + стоп-слова) + StateStore (is_processed).
 """
 
 import random

@@ -65,6 +65,7 @@ class SearchConfig:
     max_friends_to_collect: int = 200
     max_groups_to_collect: int = 200
     days_back: int = 30
+    stop_words: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -164,6 +165,7 @@ class ConfigLoader:
                 max_friends_to_collect=search_raw.get("max_friends_to_collect", 200),
                 max_groups_to_collect=search_raw.get("max_groups_to_collect", 200),
                 days_back=search_raw.get("days_back", 30),
+                stop_words=search_raw.get("stop_words", []),
             ),
             limits=LimitsConfig(
                 likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
