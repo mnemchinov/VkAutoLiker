@@ -1,4 +1,4 @@
-from config import ConfigLoader, AppConfig, ApiConfig, BrowserConfig, SearchConfig, LimitsConfig
+from config import ApiConfig, AppConfig, BrowserConfig, ConfigLoader, LimitsConfig, SearchConfig
 
 
 class TestConfigLoader:

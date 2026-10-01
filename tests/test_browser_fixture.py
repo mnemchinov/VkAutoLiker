@@ -1,13 +1,15 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 
 @pytest.mark.browser
 class TestBrowserLikesFixture:
     def test_find_like_button_in_post_container(self, http_fixture_server, mock_config, mock_logger):
         from selenium import webdriver
-        from selenium.webdriver.common.by import By
         from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+
         from browser_likes import BrowserLikesService
 
         options = Options()

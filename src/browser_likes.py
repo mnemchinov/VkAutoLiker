@@ -3,7 +3,7 @@
 import random
 import time
 from enum import Enum
-from typing import Optional
+from typing import ClassVar
 
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -44,7 +44,7 @@ class BrowserLikesService:
     реальные mousemove → mousedown → mouseup → click с координатами.
     """
 
-    _CAPTCHA_SELECTORS = [
+    _CAPTCHA_SELECTORS: ClassVar[list[str]] = [
         '[class*="captcha"]',
         'input[name="captcha_sid"]',
         'img[src*="captcha"]',

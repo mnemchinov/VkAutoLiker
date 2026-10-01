@@ -3,7 +3,6 @@
 import sqlite3
 import time
 from datetime import date
-from typing import Tuple
 
 from config import AppConfig
 from logger import AppLogger
@@ -101,7 +100,7 @@ class StateStore:
         )
         self._conn.commit()
 
-    def get_daily_stats(self) -> Tuple[int, int]:
+    def get_daily_stats(self) -> tuple[int, int]:
         """Возвращает (авто-сессий сегодня, лайков в авто-сессиях сегодня).
 
         Учитываются только сессии с is_auto=1 — ручные запуски через --no-limit
@@ -116,7 +115,7 @@ class StateStore:
         row = cursor.fetchone()
         return (row[0], row[1])
 
-    def get_total_stats(self) -> Tuple[int, int]:
+    def get_total_stats(self) -> tuple[int, int]:
         """Возвращает (всего сессий, всего лайков) — все сессии, включая ручные."""
         cursor = self._conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions"
@@ -124,7 +123,7 @@ class StateStore:
         row = cursor.fetchone()
         return (row[0], row[1])
 
-    def get_manual_stats(self) -> Tuple[int, int]:
+    def get_manual_stats(self) -> tuple[int, int]:
         """Возвращает (ручных сессий, лайков в ручных сессиях) — is_auto=0."""
         cursor = self._conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions WHERE is_auto = 0"

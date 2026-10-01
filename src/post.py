@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-
 POST_URL_TEMPLATE = "https://vk.ru/wall{owner_id}_{item_id}"
 
 

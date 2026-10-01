@@ -6,7 +6,7 @@ Pipeline прогоняет контекст через стадии по пор
 """
 
 from dataclasses import dataclass, field
-from typing import List, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from config import AppConfig
 from post import Post
@@ -24,7 +24,7 @@ class PipelineContext:
 
     config: AppConfig
     target_likes: int = 0
-    posts: List[Post] = field(default_factory=list)
+    posts: list[Post] = field(default_factory=list)
 
 
 @runtime_checkable
@@ -41,7 +41,7 @@ class Pipeline:
     Порядок стадий = порядок в списке конструктора.
     """
 
-    def __init__(self, stages: List[Stage]):
+    def __init__(self, stages: list[Stage]):
         """Инициализирует конвейер со списком стадий."""
         self._stages = stages
 

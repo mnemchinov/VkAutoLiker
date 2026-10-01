@@ -10,8 +10,8 @@ from typing import TextIO
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import ConfigLoader
-from logger import AppLogger
 from liker import AutoLiker
+from logger import AppLogger
 
 # Файл-блокировка: предотвращает двойной запуск (launchd может стартовать 2 процесса)
 _LOCK_FILE = Path(__file__).parent / ".autoliker.lock"

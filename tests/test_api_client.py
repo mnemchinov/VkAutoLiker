@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from vk_api_client import VKApiClient, VKApiError, CaptchaError
+from vk_api_client import CaptchaError, VKApiClient, VKApiError
 
 
 class TestVKApiClient:

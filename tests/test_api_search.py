@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-from post import Post
 from api_search import ApiSearchService
+from post import Post
 
 
 class TestApiSearchService:

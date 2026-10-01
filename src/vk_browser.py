@@ -7,15 +7,14 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 
 import undetected_chromedriver as uc
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 from config import AppConfig
 from logger import AppLogger
@@ -34,10 +33,10 @@ class VKBrowser:
         self._profile_path = config.browser.profile_path
         self._headless = config.browser.headless
         self._logger = logger
-        self._driver: Optional[WebDriver] = None
+        self._driver: WebDriver | None = None
 
     @staticmethod
-    def _detect_chrome_version() -> Optional[int]:
+    def _detect_chrome_version() -> int | None:
         """Определяет мажорную версию установленного Chrome через subprocess.
 
         UC без version_main скачивает последний ChromeDriver, который может
@@ -69,7 +68,7 @@ class VKBrowser:
                 continue
         return None
 
-    def _create_driver(self, headless: Optional[bool] = None) -> WebDriver:
+    def _create_driver(self, headless: bool | None = None) -> WebDriver:
         """Создаёт Chrome driver через undetected-chromedriver с персистентным профилем.
 
         undetected-chromedriver патчит: UA, navigator.webdriver, navigator.plugins,
@@ -127,7 +126,7 @@ class VKBrowser:
         except Exception as e:
             self._logger.debug(f"Ошибка cleanup Chrome: {e}")
 
-    def start(self, headless: Optional[bool] = None) -> None:
+    def start(self, headless: bool | None = None) -> None:
         """Запускает Chrome: завершает stale-процессы, создаёт driver.
 
         Параметр headless перекрывает конфиг — login() передаёт False для 2FA.
@@ -212,7 +211,7 @@ class VKBrowser:
             self._logger.debug(f"Клик не удался по элементу: {e}")
             return False
 
-    def get_attribute(self, css_selector: str, attribute: str) -> Optional[str]:
+    def get_attribute(self, css_selector: str, attribute: str) -> str | None:
         """Возвращает значение атрибута элемента по CSS-селектору. None, если не найден."""
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, css_selector)

@@ -7,7 +7,8 @@ AutoLiker создаёт Pipeline в конструкторе и вызвает 
 
 import random
 import time
-from typing import List
+
+from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
 from api_search import ApiSearchService
 from browser_likes import BrowserLikesService, LikeResult
@@ -19,9 +20,8 @@ from post_filter import PostFilter
 from stage_collect import CollectStage
 from stage_dedup import DedupStage
 from state_store import StateStore
-from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
-from vk_browser import VKBrowser
 from vk_api_client import CaptchaError, VKApiClient
+from vk_browser import VKBrowser
 
 
 class AutoLiker:
@@ -63,7 +63,7 @@ class AutoLiker:
         self._logger.info("Авторизация: OK")
 
         self._logger.info("Проверка API-поиска...")
-        posts: List[Post] = []
+        posts: list[Post] = []
         for query in self._config.search.queries[:1]:
             posts = self._search_service.search(query, max_posts=3)
             if posts:
@@ -120,7 +120,7 @@ class AutoLiker:
             return
 
         if not no_limit:
-            sessions_today, likes_today = self._state.get_daily_stats()
+            sessions_today, _likes_today = self._state.get_daily_stats()
             if sessions_today >= self._config.limits.sessions_per_day:
                 self._logger.info(
                     f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.limits.sessions_per_day})"

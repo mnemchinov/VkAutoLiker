@@ -1,7 +1,6 @@
 """HTTP-клиент к VK API с rate-лимитом и обработкой ошибок."""
 
 import time
-from typing import Dict, Optional
 
 import requests
 
@@ -49,7 +48,7 @@ class VKApiClient:
         self._last_call_time: float = 0.0
         self._min_interval: float = 0.34  # ~3 req/sec
 
-    def call(self, method: str, params: Optional[Dict] = None) -> Dict:
+    def call(self, method: str, params: dict | None = None) -> dict:
         """Вызывает VK API метод и возвращает поле 'response' из ответа.
 
         При error 6 — ретрай в цикле (не рекурсия), max 3 попытки.
