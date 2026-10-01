@@ -180,7 +180,6 @@ class AutoLiker:
                         already_liked_count += 1
                         captcha_streak = 0
                         self._state.mark_processed(post.owner_id, post.item_id)
-                        self._logger.info(f"Уже лайкнут: {post.owner_id}_{post.item_id}")
                         skip_delay = random.uniform(2, 5)
                         time.sleep(skip_delay)
                         continue
