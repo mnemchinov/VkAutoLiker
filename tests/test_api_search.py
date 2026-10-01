@@ -63,29 +63,31 @@ class TestApiSearchService:
         assert posts[0].owner_id == -123
         assert posts[0].item_id == 1
 
-    def test_get_friends(self, mock_config, mock_logger):
+    def test_get_friends_returns_all(self, mock_config, mock_logger):
+        """get_friends возвращает всех друзей без среза."""
+        all_ids = list(range(1000, 1100))  # 100 друзей
         client = MagicMock()
-        client.call.return_value = {"items": [111, 222, 333]}
+        client.call.return_value = {"items": all_ids}
 
         svc = ApiSearchService(client, mock_logger)
-        friends = svc.get_friends(12345, max_count=200)
+        friends = svc.get_friends(12345)
 
-        assert friends == [111, 222, 333]
+        assert friends == all_ids
+        assert len(friends) == 100
         client.call.assert_called_with("friends.get", {"user_id": 12345, "count": 1000})
 
-    def test_get_groups(self, mock_config, mock_logger):
+    def test_get_groups_returns_all(self, mock_config, mock_logger):
+        """get_groups возвращает все группы без среза, ID отрицательные."""
+        items = list(range(1, 51))  # extended=0 → список int
         client = MagicMock()
-        client.call.return_value = {
-            "items": [
-                {"id": 100, "name": "Group 1"},
-                {"id": 200, "name": "Group 2"},
-            ]
-        }
+        client.call.return_value = {"items": items}
 
         svc = ApiSearchService(client, mock_logger)
-        groups = svc.get_groups(12345, max_count=200)
+        groups = svc.get_groups(12345)
 
-        assert groups == [-100, -200]
+        assert len(groups) == 50
+        assert groups[0] == -1
+        assert groups[-1] == -50
 
     def test_resolve_screen_name_group(self, mock_config, mock_logger):
         client = MagicMock()

@@ -190,3 +190,52 @@ class TestCollectStage:
 
         assert result.posts == []
         collect_stage._search.search.assert_not_called()
+
+    def test_friends_early_exit_before_safety_cap(self, collect_stage, mock_config):
+        """Early-exit срабатывает до safety-капа — не все друзья опрашиваются."""
+        mock_config.search.auto_friends = True
+        mock_config.search.auto_groups = False
+        mock_config.search.queries = []
+        mock_config.search.hashtags = []
+        mock_config.search.groups = []
+        mock_config.search.accounts = []
+        mock_config.search.max_friends_to_collect = 100
+
+        friend_ids = list(range(100, 200))  # 100 друзей
+        collect_stage._search.get_friends = MagicMock(return_value=friend_ids)
+
+        def wall_side_effect(owner_id, max_posts=10):
+            return [_make_post(owner_id, j) for j in range(5)]
+
+        collect_stage._search.get_wall_posts = MagicMock(side_effect=wall_side_effect)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        # enough = 5 * 2 = 10; 2 друга × 5 постов = 10 → early-exit после 2
+        assert collect_stage._search.get_wall_posts.call_count <= 3
+        assert len(result.posts) >= 10
+
+    def test_friends_safety_cap_limits_api_calls(self, collect_stage, mock_config):
+        """max_friends_to_collect — safety-кап на число API-вызовов, не срез списка."""
+        mock_config.search.auto_friends = True
+        mock_config.search.auto_groups = False
+        mock_config.search.queries = []
+        mock_config.search.hashtags = []
+        mock_config.search.groups = []
+        mock_config.search.accounts = []
+        mock_config.search.max_friends_to_collect = 3
+
+        friend_ids = list(range(100, 200))  # 100 друзей
+        collect_stage._search.get_friends = MagicMock(return_value=friend_ids)
+
+        def wall_side_effect(owner_id, max_posts=10):
+            return []  # все стены пустые — early-exit не сработает
+
+        collect_stage._search.get_wall_posts = MagicMock(side_effect=wall_side_effect)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        assert collect_stage._search.get_wall_posts.call_count == 3
+        assert result.posts == []
