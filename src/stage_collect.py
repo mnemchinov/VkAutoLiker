@@ -108,18 +108,20 @@ class CollectStage:
 
         if len(all_posts) < enough and self._config.search.auto_friends and self._config.search.user_id:
             try:
-                friend_ids = self._search.get_friends(
-                    self._config.search.user_id,
-                    max_count=self._config.search.max_friends_to_collect,
-                )
+                friend_ids = self._search.get_friends(self._config.search.user_id)
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список друзей: {e}")
                 friend_ids = []
             random.shuffle(friend_ids)
-            for fid in friend_ids[:self._config.search.max_friends_to_collect]:
+            api_calls = 0
+            for fid in friend_ids:
                 if len(all_posts) >= enough:
                     self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей")
                     break
+                if api_calls >= self._config.search.max_friends_to_collect:
+                    self._logger.info(f"Достигнут лимит API-вызовов к друзьям ({api_calls})")
+                    break
+                api_calls += 1
                 try:
                     posts = self._search.get_wall_posts(
                         fid, max_posts=self._config.search.max_posts_per_friend
@@ -131,18 +133,20 @@ class CollectStage:
 
         if len(all_posts) < enough and self._config.search.auto_groups and self._config.search.user_id:
             try:
-                group_ids = self._search.get_groups(
-                    self._config.search.user_id,
-                    max_count=self._config.search.max_groups_to_collect,
-                )
+                group_ids = self._search.get_groups(self._config.search.user_id)
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список групп: {e}")
                 group_ids = []
             random.shuffle(group_ids)
-            for gid in group_ids[:self._config.search.max_groups_to_collect]:
+            api_calls = 0
+            for gid in group_ids:
                 if len(all_posts) >= enough:
                     self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных групп")
                     break
+                if api_calls >= self._config.search.max_groups_to_collect:
+                    self._logger.info(f"Достигнут лимит API-вызовов к группам ({api_calls})")
+                    break
+                api_calls += 1
                 try:
                     posts = self._search.get_wall_posts(
                         gid, max_posts=self._config.search.max_posts_per_group

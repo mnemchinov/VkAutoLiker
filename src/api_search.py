@@ -74,11 +74,11 @@ class ApiSearchService:
         self._logger.info(f"Найдено {len(posts)} постов на стене owner_id={owner_id}")
         return posts[:max_posts]
 
-    def get_friends(self, user_id: int, max_count: int = 1000) -> List[int]:
-        """Возвращает список ID друзей пользователя (friends.get).
+    def get_friends(self, user_id: int) -> List[int]:
+        """Возвращает полный список ID друзей пользователя (friends.get).
 
-        Всегда запрашивает count=1000 (один API-вызов), возвращает max_count.
-        Порядок перемешивается вызывающей стороной для разнообразия между сессиями.
+        Всегда запрашивает count=1000 (один API-вызов), возвращает всех друзей.
+        Перемешивание и ограничение числа API-вызовов — на стороне CollectStage.
         """
         self._logger.info(f"API friends.get: user_id={user_id}")
         resp = self._client.call("friends.get", {
@@ -88,24 +88,25 @@ class ApiSearchService:
         items = resp.get("items", [])
         friend_ids = [f for f in items if isinstance(f, int)]
         self._logger.info(f"Найдено {len(friend_ids)} друзей")
-        return friend_ids[:max_count]
+        return friend_ids
 
-    def get_groups(self, user_id: int, max_count: int = 200) -> List[int]:
-        """Возвращает список ID групп пользователя (groups.get).
+    def get_groups(self, user_id: int) -> List[int]:
+        """Возвращает полный список ID групп пользователя (groups.get).
 
-        Всегда запрашивает count=1000 (один API-вызов), возвращает max_count.
+        Всегда запрашивает count=1000 (один API-вызов), возвращает все группы.
         ID возвращаются отрицательными (формат owner_id для wall.get).
+        Перемешивание и ограничение числа API-вызовов — на стороне CollectStage.
         """
         self._logger.info(f"API groups.get: user_id={user_id}")
         resp = self._client.call("groups.get", {
             "user_id": user_id,
             "count": 1000,
-            "extended": 1,
+            "extended": 0,
         })
         items = resp.get("items", [])
-        group_ids = [-g["id"] for g in items if "id" in g]
+        group_ids = [-gid for gid in items if isinstance(gid, int)]
         self._logger.info(f"Найдено {len(group_ids)} групп")
-        return group_ids[:max_count]
+        return group_ids
 
     def resolve_screen_name(self, screen_name: str) -> Optional[int]:
         """Преобразует короткое имя (screen_name) в owner_id.

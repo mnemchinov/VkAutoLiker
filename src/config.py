@@ -62,8 +62,8 @@ class SearchConfig:
     max_posts_per_group: int = 100
     max_posts_per_account: int = 100
     max_posts_per_friend: int = 10
-    max_friends_to_collect: int = 50
-    max_groups_to_collect: int = 50
+    max_friends_to_collect: int = 200
+    max_groups_to_collect: int = 200
     days_back: int = 30
 
 
@@ -161,8 +161,8 @@ class ConfigLoader:
                 max_posts_per_group=search_raw.get("max_posts_per_group", 100),
                 max_posts_per_account=search_raw.get("max_posts_per_account", 100),
                 max_posts_per_friend=search_raw.get("max_posts_per_friend", 10),
-                max_friends_to_collect=search_raw.get("max_friends_to_collect", 50),
-                max_groups_to_collect=search_raw.get("max_groups_to_collect", 50),
+                max_friends_to_collect=search_raw.get("max_friends_to_collect", 200),
+                max_groups_to_collect=search_raw.get("max_groups_to_collect", 200),
                 days_back=search_raw.get("days_back", 30),
             ),
             limits=LimitsConfig(

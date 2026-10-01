@@ -27,8 +27,8 @@ search:
   max_posts_per_group: 100 # лимит постов со стены одной группы
   max_posts_per_account: 100 # лимит постов со стены одного пользователя
   max_posts_per_friend: 10 # лимит постов со стены одного друга
-  max_friends_to_collect: 50 # сколько друзей собрать из friends.get (макс. API — 1000)
-  max_groups_to_collect: 50 # сколько групп собрать из groups.get (макс. API — 1000)
+  max_friends_to_collect: 200 # макс. число API-вызовов wall.get к друзьям (из всех друзей, случайно)
+  max_groups_to_collect: 200 # макс. число API-вызовов wall.get к группам (из всех групп, случайно)
   days_back: 30 # не лайкать посты старше N дней
 
 # Лимиты и задержки (все рандомизируются через random.uniform)
