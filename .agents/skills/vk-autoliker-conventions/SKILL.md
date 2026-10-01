@@ -77,12 +77,13 @@ VK — React-приложение. После клика `aria-label` меняе
 `PostFilter.filter()` и **до** добавления в `all_posts`. Ранний выход
 `enough = target_likes * 2` считает только необработанные посты.
 
-### 10. Друзья и группы перемешиваются перед срезом
+### 10. Друзья и группы перемешиваются, итерируются до early-exit или safety-капа
 
 `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
-возвращают полный список. Вызывающая сторона делает `random.shuffle()` и берёт
-`max_friends_to_collect`/`max_groups_to_collect` — каждая сессия работает со
-случайным подмножеством.
+возвращают полный список. `CollectStage` делает `random.shuffle()` и итерирует по всем,
+проверяя `is_processed` + `PostFilter` inline. Early-exit при `len(all_posts) >= enough`.
+`max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
+`wall.get` (не срез списка): достигнут → `break`.
 
 ### 11. Приоритет источников
 

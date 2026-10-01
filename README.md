@@ -148,8 +148,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `max_posts_per_group` | `100` | — | Лимит постов со стены одной группы |
 | `max_posts_per_account` | `100` | — | Лимит постов со стены одного пользователя |
 | `max_posts_per_friend` | `10` | — | Лимит постов со стены одного друга |
-| `max_friends_to_collect` | `50` | — | Сколько друзей выбрать из `friends.get` (макс. 1000) |
-| `max_groups_to_collect` | `50` | — | Сколько групп выбрать из `groups.get` (макс. 1000) |
+| `max_friends_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
+| `max_groups_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
 | `days_back` | `30` | — | Не лайкать посты старше N дней |
 
 ### `limits` — лимиты и задержки
