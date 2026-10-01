@@ -21,8 +21,7 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `PostFilter (давность/дубли/текст)` → `SQLite (дедупликация)`
-→ `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
+`VK API (сбор постов)` → `CollectStage (PostFilter + is_processed + ранний выход)` → `DedupStage (дедупликация)` → `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
 ### Стек
 
@@ -51,10 +50,13 @@ src/                   — весь код, плоская структура Б
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
   vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: days_back, уже обработанные, пустой текст
+  post_filter.py       — PostFilter: days_back, пустой текст (без StateStore)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
+  pipeline.py          — Pipeline + PipelineContext + Stage Protocol
+  stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline
+  stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset)
@@ -110,7 +112,7 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 62 passed, 2 skipped (live пропускаются)
+pytest                                  # 70 passed, 2 skipped (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
@@ -125,7 +127,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 61 тест, маркер не нужен.
+- Юнит-тесты на моках — 68 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтеров/форматтеров/CI в проекте нет)
@@ -187,10 +189,11 @@ pytest -m "not browser and not live"    # базовая страховка по
    пер-сесссионные (`likes_per_session`) внутри цикла. `--no-limit` обходит дневной лимит:
    сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
    `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
-9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `_collect_posts()`
-   в `liker.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
+9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
+   в `stage_collect.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = likes_per_session * 2` считает только
    необработанные посты, иначе нижестоящие источники пропускались бы зря.
+   `PostFilter` больше не зависит от `StateStore` — проверяет только `days_back` и пустой текст.
 10. **Друзья и группы перемешиваются перед срезом.** `get_friends()`/`get_groups()` всегда
     запрашивают `count=1000` (один API-вызов), возвращают полный список; вызывающая сторона
     делает `random.shuffle()` и берёт `max_friends_to_collect`/`max_groups_to_collect` —

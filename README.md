@@ -28,8 +28,8 @@
 **Цепочка данных:**
 ```
 VK API (сбор постов с реальными датами)
-  → PostFilter (давность / пустой текст)
-  → SQLite (дедупликация is_processed)
+  → CollectStage (PostFilter + is_processed + ранний выход)
+  → DedupStage (дедупликация по owner_id + item_id)
   → Selenium (навигация → «чтение» → клик по лайку)
   → проверка aria-label → запись в SQLite
 ```
@@ -141,10 +141,13 @@ src/                         — весь код (плоская структу�
   post.py                    — Post dataclass + build_post_url()
   vk_api_client.py           — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py              — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py             — PostFilter: давность / дубли / пустой текст
+  post_filter.py             — PostFilter: давность / пустой текст
   vk_browser.py              — VKBrowser: Selenium Chrome + антидетект + network retry
   browser_likes.py           — BrowserLikesService: клик по лайку + верификация (data-post-id)
   state_store.py             — StateStore: SQLite (processed_posts, sessions)
+  pipeline.py                — Pipeline + PipelineContext + Stage Protocol
+  stage_collect.py           — CollectStage: 6 источников, ранний выход, фильтрация inline
+  stage_dedup.py             — DedupStage: дедупликация по (owner_id, item_id)
 tests/                       — pytest-тесты
   conftest.py                — фикстуры (mock_config, mock_logger, tmp_db, …)
   fixtures/vk_post.html      — HTML-фикстура для браузерных тестов
@@ -154,6 +157,9 @@ tests/                       — pytest-тесты
   test_browser_fixture.py    — тесты против локального HTML (маркер browser)
   test_config.py             — тесты ConfigLoader
   test_liker.py              — тесты AutoLiker (mock всех зависимостей)
+  test_pipeline.py           — тесты Pipeline
+  test_stage_collect.py      — тесты CollectStage
+  test_stage_dedup.py        — тесты DedupStage
   test_post_filter.py        — тесты PostFilter
   test_state_store.py        — тесты StateStore
   test_vk_browser.py         — тесты VKBrowser.is_logged_in()
@@ -168,7 +174,7 @@ vk_autoliker.stderr.log      — stderr launchd (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 62 passed, 2 skipped (live-тесты пропускаются)
+pytest                                  # 70 passed, 2 skipped (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
@@ -177,7 +183,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
 ```
 
 Три уровня:
-1. **Mock WebDriver** (61 тест) — быстрые юнит-тесты, без браузера и сети
+1. **Mock WebDriver** (68 тестов) — быстрые юнит-тесты, без браузера и сети
 2. **HTML-фикстура** (1 тест, маркер `browser`) — локальный `http.server` + headless Chrome против `vk_post.html`
 3. **Live** (2 теста, маркер `live`) — e2e на реальном посте VK; `pytest.skip` по умолчанию, запускаются только вручную после `python src/main.py login`
 
