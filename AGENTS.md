@@ -27,11 +27,12 @@
 
 - **Язык:** Python 3.14 (venv: `.venv/`)
 - **Зависимости** (`requirements.txt`): `selenium>=4.15.0`, `requests>=2.31.0`,
-  `PyYAML>=6.0`, `pytest>=8.0.0`
+  `PyYAML>=6.0`, `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`
 - **Хранилище состояния:** SQLite (стандартная библиотека `sqlite3`), файл `vk_autoliker.db`
 - **Конфигурация:** один YAML-файл `config.yaml` в корне
 - **Логирование:** стандартный `logging`, консоль + файл `vk_autoliker.log`
-- **Браузер:** Chrome через `webdriver.Chrome` (Selenium Manager сам подтягивает driver)
+- **Браузер:** Chrome через `undetected-chromedriver` (UC патчит антидетект:
+  UA, navigator.webdriver, plugins, window.chrome, WebGL; `version_main` — авто-детект)
 - **README.md:** документация проекта; CI/линтеры/setup.py отсутствуют, сборка как пакета не предусмотрена
 
 ### Структура
@@ -82,7 +83,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Требуется установленный Google Chrome (Selenium сам скачает совместимый driver).
+Требуется установленный Google Chrome (UC скачает совместимый ChromeDriver через `version_main`).
 
 ### Команды запуска
 
@@ -113,12 +114,12 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 70 passed, 2 skipped (live пропускаются)
+pytest                                  # 79 passed, 2 skipped (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_config.py -v          # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -128,7 +129,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (71%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 68 тестов, маркер не нужен.
+- Юнит-тесты на моках — ~75 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтеров/форматтеров/CI в проекте нет)
@@ -166,8 +167,9 @@ pytest -m "not browser and not live"    # базовая страховка по
 ### Критичные инварианты (не ломать)
 
 1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных пауз
-   в коде быть не должно — это осознанная имитация человека. Исключение: `time.sleep(1)`
-   при ретрае ошибки 6 и `random.uniform(1, 3)` после клика.
+   в коде быть не должно — это осознанная имитация человека. Исключения: `time.sleep(1)`
+   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `vk_api_client.py`,
+   `random.uniform(1, 3)` после клика, `random.uniform(55, 65)` в `is_logged_in()`.
 2. **Rate-limit VK API ≈ 3 запроса/сек** (`_min_interval = 0.34`). Любой новый вызов API
    обязан идти через `VKApiClient.call()` — иначе лимиты и обработка ошибок 6/14 теряются.
 3. **Селектор лайка завязан на `aria-label`:** `«Отправить реакцию «Лайк»»` →
@@ -180,8 +182,9 @@ pytest -m "not browser and not live"    # базовая страховка по
 4. **Признак авторизации — cookie `remixsid`.** `VKBrowser.is_logged_in()` перед чтением
    cookies обязательно навигирует на `vk.ru` (Selenium отдаёт cookie только текущего домена).
 5. **Дедупликация по паре `(owner_id, item_id)`** — первичный ключ в `processed_posts`
-   и `INSERT OR IGNORE`. Пост помечается обработанным и при успехе, и при провале,
-   и при исключении — чтобы не долбить один и тот же пост бесконечно.
+   и `INSERT OR IGNORE`. Пост помечается обработанным и при успехе, и при провале.
+   Исключение: `WebDriverException`/`InvalidSessionIdException` — крах браузера → `break`
+   без `mark_processed`, чтобы оставшиеся посты можно было повторить в следующей сессии.
 6. **`owner_id` для групп отрицательный.** `groups.get` возвращает положительные ID —
    они разворачиваются в `-id`; `resolve_screen_name` для `group`/`page` тоже возвращает `-id`.
 7. **URL постов строятся на домене `vk.ru`** (`https://vk.ru/wall{owner_id}_{item_id}`),
@@ -204,6 +207,19 @@ pytest -m "not browser and not live"    # базовая страховка по
     предыдущие не набрали `enough` постов. Финального перемешивания между источниками нет.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
     использующие `chrome_profile/` (через `pgrep` + `SIGTERM`), иначе `SessionNotCreatedException`.
+13. **Клик через ActionChains.** `click_element` использует `move_to_element + pause + click`
+    (мышиная траектория), а не синтетический `element.click()`.
+14. **Капча-стоп.** `_detect_captcha()` в `browser_likes.py` проверяет CSS-селектор капчи;
+    `_captcha_streak` счётчик сбрасывается при успехе, стоп при `>= max_captcha_streak`.
+    `CaptchaError` от API ловится в `liker.run()`.
+15. **Burst-смягчение.** Каждые `random.randint(5, 10)` лайков — длинная пауза
+    `random.uniform(60, 180)` сек для имитации отвлечения.
+16. **`like()` возвращает `LikeResult`** (LIKED / ALREADY_LIKED / CAPTCHA / FAILED) —
+    отдельный `is_liked()` не нужен, двойная навигация устранена.
+17. **Chrome version auto-detect.** `vk_browser.py` определяет версию Chrome через
+    `subprocess` и передаёт `version_main` в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
+18. **Config validation.** `ConfigLoader._validate()` проверяет `min <= max` для всех
+    пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`.
 
 ### Практики тестирования
 
@@ -234,7 +250,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Эксплуатационные ограничения
 
-Проект автоматизирует реальный аккаунт VK. Дефолт (`30 лайков/сессия`, `3 сессии/день`,
+Проект автоматизирует реальный аккаунт VK. Дефолт (`20–30 лайков/сессия`, `3 сессии/день`,
 паузы 15–60 сек) выбран для снижения риска бана. Прежде чем повышать лимиты, убирать
 задержки, отключать антидетект-настройки Chrome или расширять круг источников, —
 остановиться и спросить пользователя. `max_captcha_streak` заложен как стоп-условие:
