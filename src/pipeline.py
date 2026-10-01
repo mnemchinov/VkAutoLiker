@@ -22,9 +22,9 @@ class PipelineContext:
     используется CollectStage для раннего выхода (enough = target_likes * 2).
     """
 
-    posts: List[Post] = field(default_factory=list)
-    config: AppConfig = None  # type: ignore[assignment]
+    config: AppConfig
     target_likes: int = 0
+    posts: List[Post] = field(default_factory=list)
 
 
 @runtime_checkable

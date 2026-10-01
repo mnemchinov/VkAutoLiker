@@ -57,13 +57,13 @@ class SearchConfig:
     accounts: List[str] = field(default_factory=list)
     auto_friends: bool = False
     auto_groups: bool = False
-    max_posts_per_query: int = 50
-    max_posts_per_hashtag: int = 50
-    max_posts_per_group: int = 10
-    max_posts_per_account: int = 5
-    max_posts_per_friend: int = 5
-    max_friends_to_collect: int = 1000
-    max_groups_to_collect: int = 1000
+    max_posts_per_query: int = 100
+    max_posts_per_hashtag: int = 100
+    max_posts_per_group: int = 100
+    max_posts_per_account: int = 100
+    max_posts_per_friend: int = 10
+    max_friends_to_collect: int = 50
+    max_groups_to_collect: int = 50
     days_back: int = 30
 
 
@@ -77,9 +77,9 @@ class LimitsConfig:
 
     likes_per_session_min: int = 20
     likes_per_session_max: int = 30
-    sessions_per_day: int = 2
-    min_delay_sec: int = 60
-    max_delay_sec: int = 120
+    sessions_per_day: int = 3
+    min_delay_sec: int = 15
+    max_delay_sec: int = 60
     view_delay_min_sec: int = 3
     view_delay_max_sec: int = 10
     max_captcha_streak: int = 3
@@ -133,7 +133,7 @@ class ConfigLoader:
 
         api_raw = raw.get("api", {})
         browser_raw = raw.get("browser", {})
-        search_raw = raw["search"]
+        search_raw = raw.get("search", {})
         limits_raw = raw.get("limits", {})
         logging_raw = raw.get("logging", {})
         state_raw = raw.get("state", {})
@@ -156,21 +156,21 @@ class ConfigLoader:
                 accounts=search_raw.get("accounts", []),
                 auto_friends=search_raw.get("auto_friends", False),
                 auto_groups=search_raw.get("auto_groups", False),
-                max_posts_per_query=search_raw.get("max_posts_per_query", 50),
-                max_posts_per_hashtag=search_raw.get("max_posts_per_hashtag", 50),
-                max_posts_per_group=search_raw.get("max_posts_per_group", 50),
+                max_posts_per_query=search_raw.get("max_posts_per_query", 100),
+                max_posts_per_hashtag=search_raw.get("max_posts_per_hashtag", 100),
+                max_posts_per_group=search_raw.get("max_posts_per_group", 100),
                 max_posts_per_account=search_raw.get("max_posts_per_account", 100),
-                max_posts_per_friend=search_raw.get("max_posts_per_friend", 100),
-                max_friends_to_collect=search_raw.get("max_friends_to_collect", 200),
-                max_groups_to_collect=search_raw.get("max_groups_to_collect", 200),
+                max_posts_per_friend=search_raw.get("max_posts_per_friend", 10),
+                max_friends_to_collect=search_raw.get("max_friends_to_collect", 50),
+                max_groups_to_collect=search_raw.get("max_groups_to_collect", 50),
                 days_back=search_raw.get("days_back", 30),
             ),
             limits=LimitsConfig(
                 likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
                 likes_per_session_max=limits_raw.get("likes_per_session_max", 30),
-                sessions_per_day=limits_raw.get("sessions_per_day", 2),
-                min_delay_sec=limits_raw.get("min_delay_sec", 60),
-                max_delay_sec=limits_raw.get("max_delay_sec", 120),
+                sessions_per_day=limits_raw.get("sessions_per_day", 3),
+                min_delay_sec=limits_raw.get("min_delay_sec", 15),
+                max_delay_sec=limits_raw.get("max_delay_sec", 60),
                 view_delay_min_sec=limits_raw.get("view_delay_min_sec", 3),
                 view_delay_max_sec=limits_raw.get("view_delay_max_sec", 10),
                 max_captcha_streak=limits_raw.get("max_captcha_streak", 3),
@@ -183,7 +183,38 @@ class ConfigLoader:
                 db_path=state_raw.get("db_path", "vk_autoliker.db"),
             ),
         )
+
+        self._validate(self._config)
         return self._config
+
+    @staticmethod
+    def _validate(config: AppConfig) -> None:
+        """Проверяет корректность конфигурации: min <= max, days_back > 0 и т.д.
+
+        Raises:
+            ValueError: если параметр некорректен.
+        """
+        limits = config.limits
+        if limits.likes_per_session_min > limits.likes_per_session_max:
+            raise ValueError(
+                f"likes_per_session_min ({limits.likes_per_session_min}) > "
+                f"likes_per_session_max ({limits.likes_per_session_max})"
+            )
+        if limits.min_delay_sec > limits.max_delay_sec:
+            raise ValueError(
+                f"min_delay_sec ({limits.min_delay_sec}) > max_delay_sec ({limits.max_delay_sec})"
+            )
+        if limits.view_delay_min_sec > limits.view_delay_max_sec:
+            raise ValueError(
+                f"view_delay_min_sec ({limits.view_delay_min_sec}) > "
+                f"view_delay_max_sec ({limits.view_delay_max_sec})"
+            )
+        if config.search.days_back <= 0:
+            raise ValueError(f"days_back должен быть > 0, получено {config.search.days_back}")
+        if (config.search.auto_friends or config.search.auto_groups) and config.search.user_id <= 0:
+            raise ValueError(
+                "auto_friends/auto_groups включены, но user_id не задан (должен быть > 0)"
+            )
 
     @property
     def config(self) -> AppConfig:

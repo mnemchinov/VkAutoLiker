@@ -26,7 +26,7 @@ class TestPipeline:
             return stage
 
         pipeline = Pipeline([make_stage("A"), make_stage("B"), make_stage("C")])
-        ctx = PipelineContext()
+        ctx = PipelineContext(config=MagicMock())
         pipeline.run(ctx)
 
         assert calls == ["A", "B", "C"]
@@ -34,11 +34,11 @@ class TestPipeline:
     def test_chaining_returns_final_context(self):
         """Pipeline возвращает контекст после последней стадии."""
         stage = MagicMock()
-        final_ctx = PipelineContext(posts=[_make_post(1, 1)])
+        final_ctx = PipelineContext(config=MagicMock(), posts=[_make_post(1, 1)])
         stage.process.return_value = final_ctx
 
         pipeline = Pipeline([stage])
-        input_ctx = PipelineContext()
+        input_ctx = PipelineContext(config=MagicMock())
         result = pipeline.run(input_ctx)
 
         assert result is final_ctx
@@ -47,7 +47,7 @@ class TestPipeline:
     def test_empty_stages_returns_input(self):
         """Pipeline без стадий возвращает входной контекст без изменений."""
         pipeline = Pipeline([])
-        ctx = PipelineContext(posts=[_make_post(1, 1)])
+        ctx = PipelineContext(config=MagicMock(), posts=[_make_post(1, 1)])
         result = pipeline.run(ctx)
 
         assert result is ctx

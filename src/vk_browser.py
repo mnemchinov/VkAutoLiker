@@ -1,6 +1,7 @@
 """Selenium Chrome с персистентным профилем для навигации и кликов по VK."""
 
 import os
+import platform
 import random
 import signal
 import subprocess
@@ -43,17 +44,30 @@ class VKBrowser:
         не совпадать с установленным Chrome. Авто-детект предотвращает
         SessionNotCreatedException из-за несовпадения версий.
         """
-        chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        try:
-            result = subprocess.run(
-                [chrome_path, "--version"],
-                capture_output=True, text=True, timeout=5,
-            )
-            # "Google Chrome 145.0.7632.117" → 145
-            version_str = result.stdout.strip().split()[-1]
-            return int(version_str.split(".")[0])
-        except (subprocess.SubprocessError, ValueError, IndexError):
-            return None
+        chrome_paths = {
+            "Darwin": ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"],
+            "Linux": [
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/chromium-browser",
+            ],
+            "Windows": [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ],
+        }
+        candidates = chrome_paths.get(platform.system(), [])
+        for chrome_path in candidates:
+            try:
+                result = subprocess.run(
+                    [chrome_path, "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version_str = result.stdout.strip().split()[-1]
+                return int(version_str.split(".")[0])
+            except (FileNotFoundError, subprocess.SubprocessError, ValueError, IndexError):
+                continue
+        return None
 
     def _create_driver(self, headless: Optional[bool] = None) -> WebDriver:
         """Создаёт Chrome driver через undetected-chromedriver с персистентным профилем.
@@ -108,10 +122,10 @@ class VKBrowser:
                 except (ProcessLookupError, PermissionError):
                     pass
             if pids:
-                time.sleep(2)
+                time.sleep(random.uniform(1.5, 2.5))
                 self._logger.info(f"Завершены процессы Chrome ({len(pids)}): {pids}")
-        except Exception:
-            pass
+        except Exception as e:
+            self._logger.debug(f"Ошибка cleanup Chrome: {e}")
 
     def start(self, headless: Optional[bool] = None) -> None:
         """Запускает Chrome: завершает stale-процессы, создаёт driver.

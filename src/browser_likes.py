@@ -5,6 +5,8 @@ import time
 from enum import Enum
 from typing import Optional
 
+from selenium.webdriver.common.action_chains import ActionChains
+
 from config import AppConfig
 from logger import AppLogger
 from post import build_post_url
@@ -144,8 +146,6 @@ class BrowserLikesService:
 
         if random.random() < 0.30:
             try:
-                from selenium.webdriver.common.action_chains import ActionChains
-
                 driver = self._browser.driver
                 ActionChains(driver).move_by_offset(
                     random.randint(-50, 50), random.randint(-30, 30)

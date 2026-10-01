@@ -82,7 +82,17 @@ class VKApiClient:
                     continue
                 raise VKApiError(0, f"Сетевая ошибка после {self._MAX_NETWORK_RETRIES} попыток: {e}")
 
-            data = response.json()
+            try:
+                data = response.json()
+            except (ValueError, requests.exceptions.JSONDecodeError) as e:
+                network_retries += 1
+                if network_retries < self._MAX_NETWORK_RETRIES:
+                    self._logger.warning(
+                        f"Не-JSON ответ (попытка {network_retries}/{self._MAX_NETWORK_RETRIES}): {e}"
+                    )
+                    time.sleep(self._NETWORK_RETRY_DELAY)
+                    continue
+                raise VKApiError(0, f"Не-JSON ответ после {self._MAX_NETWORK_RETRIES} попыток: {e}")
 
             if "error" in data:
                 error = data["error"]

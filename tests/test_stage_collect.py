@@ -179,3 +179,14 @@ class TestCollectStage:
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 5
+
+    def test_target_likes_zero_skips_collection(self, collect_stage, mock_config):
+        """target_likes=0 — сбор пропускается, возвращается пустой список."""
+        mock_config.search.queries = ["тест"]
+        collect_stage._search.search = MagicMock(return_value=[_make_post(1, 1)])
+
+        ctx = PipelineContext(config=mock_config, target_likes=0)
+        result = collect_stage.process(ctx)
+
+        assert result.posts == []
+        collect_stage._search.search.assert_not_called()

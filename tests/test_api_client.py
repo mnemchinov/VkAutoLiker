@@ -97,6 +97,37 @@ class TestVKApiClient:
 
         assert exc_info.value.code == 0
 
+    def test_json_decode_error_retries_then_success(self, mock_config, mock_logger):
+        """Не-JSON ответ (502/Cloudflare HTML) — ретрай, успех на 2-й попытке."""
+        client = VKApiClient(mock_config, mock_logger)
+
+        success_response = MagicMock()
+        success_response.json.return_value = {"response": {"ok": True}}
+
+        bad_response = MagicMock()
+        bad_response.json.side_effect = requests.exceptions.JSONDecodeError("Expecting value", "", 0)
+
+        with patch("vk_api_client.requests.get", side_effect=[bad_response, success_response]):
+            with patch("vk_api_client.time.sleep"):
+                result = client.call("newsfeed.search", {"q": "test"})
+
+        assert result == {"ok": True}
+
+    def test_json_decode_error_exhausts_retries(self, mock_config, mock_logger):
+        """Не-JSON ответ — исчерпаны все 3 попытки, выбрасывает VKApiError."""
+        client = VKApiClient(mock_config, mock_logger)
+
+        bad_response = MagicMock()
+        bad_response.json.side_effect = requests.exceptions.JSONDecodeError("Expecting value", "", 0)
+
+        with patch("vk_api_client.requests.get", return_value=bad_response) as mock_get:
+            with patch("vk_api_client.time.sleep"):
+                with pytest.raises(VKApiError) as exc_info:
+                    client.call("newsfeed.search", {"q": "test"})
+
+        assert exc_info.value.code == 0
+        assert mock_get.call_count == 3
+
     def test_rate_limit_applied(self, mock_config, mock_logger):
         client = VKApiClient(mock_config, mock_logger)
 

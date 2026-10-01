@@ -46,6 +46,11 @@ class CollectStage:
 
     def process(self, ctx: PipelineContext) -> PipelineContext:
         """Собирает посты из 6 источников с приоритетом и ранним выходом."""
+        if ctx.target_likes <= 0:
+            self._logger.warning("target_likes <= 0 — сбор постов пропущен")
+            ctx.posts = []
+            return ctx
+
         all_posts: List[Post] = []
         enough = ctx.target_likes * 2
 

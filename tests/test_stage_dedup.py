@@ -1,5 +1,7 @@
 """Unit-тесты стадии дедупликации DedupStage."""
 
+from unittest.mock import MagicMock
+
 from pipeline import PipelineContext
 from post import Post, build_post_url
 from stage_dedup import DedupStage
@@ -14,7 +16,7 @@ class TestDedupStage:
     def test_removes_duplicates(self):
         """Дубликаты по (owner_id, item_id) схлопываются."""
         posts = [_make_post(1, 1), _make_post(1, 2), _make_post(1, 1), _make_post(1, 3), _make_post(1, 2)]
-        ctx = PipelineContext(posts=posts)
+        ctx = PipelineContext(config=MagicMock(), posts=posts)
 
         result = DedupStage().process(ctx)
 
@@ -25,7 +27,7 @@ class TestDedupStage:
     def test_preserves_order(self):
         """Порядок первого вхождения сохраняется."""
         posts = [_make_post(3, 1), _make_post(2, 1), _make_post(3, 1), _make_post(1, 1)]
-        ctx = PipelineContext(posts=posts)
+        ctx = PipelineContext(config=MagicMock(), posts=posts)
 
         result = DedupStage().process(ctx)
 
@@ -34,7 +36,7 @@ class TestDedupStage:
 
     def test_empty_list_passes_through(self):
         """Пустой список проходит без изменений."""
-        ctx = PipelineContext(posts=[])
+        ctx = PipelineContext(config=MagicMock(), posts=[])
 
         result = DedupStage().process(ctx)
 

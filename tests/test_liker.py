@@ -81,7 +81,7 @@ class TestRun:
         liker._state.get_total_stats = MagicMock(return_value=(1, 0))
 
         # Pipeline возвращает пустой список постов
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=[]))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
 
         with patch("liker.time.sleep"):
             liker.run(no_limit=True)
@@ -102,7 +102,7 @@ class TestRun:
         liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0), \
              patch("liker.random.randint", side_effect=lambda a, b: a):
@@ -121,7 +121,7 @@ class TestRun:
         liker._likes_service.like = MagicMock(return_value=LikeResult.ALREADY_LIKED)
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0):
             liker.run(no_limit=True)
@@ -143,7 +143,7 @@ class TestRun:
         )
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0), \
              patch("liker.random.randint", side_effect=lambda a, b: a):
@@ -165,7 +165,7 @@ class TestRun:
         liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0), \
              patch("liker.random.randint", side_effect=lambda a, b: a):
@@ -186,7 +186,7 @@ class TestRun:
         liker._likes_service.like = MagicMock(return_value=LikeResult.CAPTCHA)
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0):
             liker.run(no_limit=True)
@@ -217,13 +217,41 @@ class TestRun:
         liker._state.end_session = MagicMock()
         liker._state.get_total_stats = MagicMock(return_value=(1, 0))
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=[]))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
 
         with patch("liker.time.sleep") as mock_sleep:
             liker.run(no_limit=True)
 
         # Нет постов → нет пауз. time.sleep не вызывается (нет jitter, нет постов)
         mock_sleep.assert_not_called()
+
+    def test_browser_crash_breaks_not_marks(self, liker, mock_config):
+        """WebDriverException — break без mark_processed, остальные посты не трогаются."""
+        from selenium.common.exceptions import InvalidSessionIdException
+
+        posts = [_make_post(1, 1), _make_post(1, 2), _make_post(1, 3)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._state.start_session = MagicMock(return_value=1)
+        liker._state.end_session = MagicMock()
+        liker._state.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._likes_service.like = MagicMock(
+            side_effect=InvalidSessionIdException("session dead")
+        )
+        liker._state.mark_processed = MagicMock()
+
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+
+        with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0), \
+             patch("liker.random.randint", side_effect=lambda a, b: a):
+            liker.run(no_limit=True)
+
+        # mark_processed НЕ вызывается при крахе браузера
+        liker._state.mark_processed.assert_not_called()
+        # like вызван только 1 раз (break после первого)
+        assert liker._likes_service.like.call_count == 1
 
     def test_burst_softening_long_pause(self, liker, mock_config):
         """Каждые 5-10 лайков — длинная пауза (60-180 сек)."""
@@ -238,7 +266,7 @@ class TestRun:
         liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
         liker._state.mark_processed = MagicMock()
 
-        liker._pipeline.run = MagicMock(return_value=PipelineContext(posts=posts))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
 
         # uniform(60, 180) → burst-пауза (120), прочие uniform → 0
         def _uniform(lo, hi):

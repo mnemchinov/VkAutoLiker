@@ -19,6 +19,7 @@ from post_filter import PostFilter
 from stage_collect import CollectStage
 from stage_dedup import DedupStage
 from state_store import StateStore
+from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 from vk_browser import VKBrowser
 from vk_api_client import CaptchaError, VKApiClient
 
@@ -190,6 +191,9 @@ class AutoLiker:
                         self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.warning(f"Лайк не удался: {post.owner_id}_{post.item_id}")
 
+                except (WebDriverException, InvalidSessionIdException) as e:
+                    self._logger.error(f"Крах браузера, остановка сессии: {e}")
+                    break
                 except Exception as e:
                     self._logger.error(f"Ошибка обработки {post.owner_id}_{post.item_id}: {e}")
                     self._state.mark_processed(post.owner_id, post.item_id)
