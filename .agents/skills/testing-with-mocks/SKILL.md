@@ -143,4 +143,4 @@ pytest -m "not browser and not live" --cov=src --cov-report=term-missing
   Проверяю: приоритет источников, early-exit на `enough`, дедупликация, shuffle.
 - **`run`** — мокаю `_collect_posts` напрямую (чтобы вернуть список `Post`), `_browser`
   и `_likes_service` — моки. Проверяю: daily limit, like success count, already-liked skip,
-  exception → continue, likes_per_session limit.
+  exception → continue, likes_per_session_min/max limit.

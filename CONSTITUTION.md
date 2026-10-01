@@ -17,7 +17,7 @@
   `time.sleep(...)` запрещены, кроме двух задокументированных исключений:
   `time.sleep(1)` при ретрае error 6 и `random.uniform(1, 3)` после клика.
 - Лимиты MUST применяться на двух уровнях: дневные (`sessions_per_day`) до
-  начала сессии и пер-сессионные (`likes_per_session`) внутри цикла.
+  начала сессии и пер-сессионные (`likes_per_session_min`/`likes_per_session_max`, `target = random.randint(min, max)`) внутри цикла.
 - `finally` MUST всегда закрывать сессию в БД, включая `KeyboardInterrupt`.
 - При капче сессия MUST прерываться (`max_captcha_streak`), обход капчи запрещён.
 - Любые изменения лимитов, задержек, антидетект-настроек или круга источников
@@ -63,7 +63,7 @@
   `resolve_screen_name` для `group`/`page` → `-id`).
 - URL постов MUST строиться на домене `vk.ru`; API — на `api.vk.ru/method`.
 - `is_processed` MUST фильтроваться при сборе (`_collect_posts()`), не только
-  в цикле лайков — ранний выход `enough = likes_per_session * 2` считает только
+  в цикле лайков — ранний выход `enough = target_likes * 2` считает только
   необработанные посты.
 - `Post.date` MUST приходить из VK API `date` (unix timestamp), не из
   `time.time()`.

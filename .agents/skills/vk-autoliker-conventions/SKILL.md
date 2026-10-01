@@ -68,14 +68,14 @@ VK — React-приложение. После клика `aria-label` меняе
 ### 8. Двухуровневые лимиты
 
 - Дневные (`sessions_per_day`) — проверка до начала сессии
-- Пер-сессионные (`likes_per_session`) — внутри цикла лайков
+- Пер-сессионные (`likes_per_session_min`/`likes_per_session_max`, `target = random.randint(min, max)`) — внутри цикла лайков
 - `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`
 
 ### 9. `is_processed` фильтруется при сборе
 
 `_collect_posts()` в `liker.py` проверяет `StateStore.is_processed()` после
 `PostFilter.filter()` и **до** добавления в `all_posts`. Ранний выход
-`enough = likes_per_session * 2` считает только необработанные посты.
+`enough = target_likes * 2` считает только необработанные посты.
 
 ### 10. Друзья и группы перемешиваются перед срезом
 

@@ -98,8 +98,9 @@ python src/main.py status   # статистика: сессии/лайки за
 python src/main.py reset    # полная очистка SQLite-базы (обработанные посты и сессии)
 ```
 
-**Порядок обязательный:** сначала `login` (headless должен быть `false` — нужен экран
-для 2FA), далее сессия сохраняется в `chrome_profile/` и повторный вход не требуется.
+**Порядок обязательный:** сначала `login` (команда форсирует `headless=False` независимо
+от `config.yaml` — нужен видимый экран для 2FA), далее сессия сохраняется в
+`chrome_profile/` и повторный вход не требуется.
 При истёкшей сессии `run`/`test` выведут `Нет авторизации. Сначала выполните команду 'login'.`
 
 ### Готовые конфигурации запуска (PyCharm)
@@ -186,12 +187,12 @@ pytest -m "not browser and not live"    # базовая страховка по
 7. **URL постов строятся на домене `vk.ru`** (`https://vk.ru/wall{owner_id}_{item_id}`),
    а API — `https://api.vk.ru/method`.
 8. **Лимиты применяются на двух уровнях:** дневные (`sessions_per_day`) до начала сессии и
-   пер-сесссионные (`likes_per_session`) внутри цикла. `--no-limit` обходит дневной лимит:
+   пер-сесссионные (`likes_per_session_min`/`likes_per_session_max`) внутри цикла. `--no-limit` обходит дневной лимит:
    сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
    `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
    в `stage_collect.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
-   добавления в `all_posts` — ранний выход `enough = likes_per_session * 2` считает только
+   добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
    необработанные посты, иначе нижестоящие источники пропускались бы зря.
    `PostFilter` больше не зависит от `StateStore` — проверяет только `days_back` и пустой текст.
 10. **Друзья и группы перемешиваются перед срезом.** `get_friends()`/`get_groups()` всегда
