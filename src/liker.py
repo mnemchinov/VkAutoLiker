@@ -1,18 +1,26 @@
-"""Оркестратор: сбор постов через API → фильтрация → лайки через браузер."""
+"""Оркестратор: сбор постов через Pipeline → лайки через браузер.
+
+Конвейер (Pipeline) обрабатывает посты через стадии:
+CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп).
+AutoLiker создаёт Pipeline в конструкторе и вызвает его в run().
+"""
 
 import random
 import time
 from typing import List
 
-from config import AppConfig
-from logger import AppLogger
-from post import Post
-from post_filter import PostFilter
-from state_store import StateStore
-from vk_browser import VKBrowser
-from vk_api_client import VKApiClient, VKApiError
 from api_search import ApiSearchService
 from browser_likes import BrowserLikesService
+from config import AppConfig
+from logger import AppLogger
+from pipeline import Pipeline, PipelineContext
+from post import Post
+from post_filter import PostFilter
+from stage_collect import CollectStage
+from stage_dedup import DedupStage
+from state_store import StateStore
+from vk_browser import VKBrowser
+from vk_api_client import VKApiClient
 
 
 class AutoLiker:
@@ -32,7 +40,11 @@ class AutoLiker:
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._state = StateStore(config, logger)
-        self._filter = PostFilter(config, self._state, logger)
+        self._filter = PostFilter(config, logger)
+        self._pipeline = Pipeline([
+            CollectStage(self._search_service, config, self._state, self._filter, logger),
+            DedupStage(),
+        ])
 
     def login(self) -> None:
         """Открывает браузер для ручного логина в VK (включая 2FA)."""
@@ -117,7 +129,9 @@ class AutoLiker:
         already_liked_count = 0
 
         try:
-            all_posts = self._collect_posts()
+            ctx = PipelineContext(config=self._config)
+            ctx = self._pipeline.run(ctx)
+            all_posts = ctx.posts
             if not all_posts:
                 self._logger.info("Нет постов после фильтрации")
                 return
@@ -199,119 +213,3 @@ class AutoLiker:
         """Закрывает браузер и базу данных."""
         self._state.close()
         self._browser.close()
-
-    def _collect_posts(self) -> List[Post]:
-        """Собирает необработанные посты с приоритетом: queries → hashtags →
-        groups → accounts → auto_friends → auto_groups.
-
-        Порядок сбора = порядок лайков: лимит расходуется на queries сначала.
-        Внутри каждого источника порядок рандомизируется.
-        Фильтр: PostFilter (давность/пустой текст) + SQLite (is_processed).
-        Дедупликация по (owner_id, item_id). Ранний выход при достижении enough.
-        """
-        all_posts: List[Post] = []
-        enough = self._config.limits.likes_per_session * 2
-
-        def _accept(posts: List[Post]) -> None:
-            """Фильтрует (PostFilter + SQLite is_processed), шафлит, добавляет в all_posts."""
-            filtered = self._filter.filter(posts)
-            fresh = [p for p in filtered if not self._state.is_processed(p.owner_id, p.item_id)]
-            random.shuffle(fresh)
-            all_posts.extend(fresh)
-
-        for query in self._config.search.queries:
-            posts = self._search_service.search(
-                query, max_posts=self._config.search.max_posts_per_query
-            )
-            _accept(posts)
-
-        for hashtag in self._config.search.hashtags:
-            posts = self._search_service.search_hashtag(
-                hashtag, max_posts=self._config.search.max_posts_per_hashtag
-            )
-            _accept(posts)
-
-        if len(all_posts) < enough:
-            for screen_name in self._config.search.groups:
-                owner_id = self._search_service.resolve_screen_name(screen_name)
-                if owner_id is None:
-                    self._logger.warning(f"Не удалось определить ID группы: {screen_name}")
-                    continue
-                try:
-                    posts = self._search_service.get_wall_posts(
-                        owner_id, max_posts=self._config.search.max_posts_per_group
-                    )
-                except VKApiError as e:
-                    self._logger.warning(f"Ошибка получения постов группы {screen_name}: {e}")
-                    continue
-                _accept(posts)
-
-        if len(all_posts) < enough:
-            for screen_name in self._config.search.accounts:
-                owner_id = self._search_service.resolve_screen_name(screen_name)
-                if owner_id is None:
-                    self._logger.warning(f"Не удалось определить ID пользователя: {screen_name}")
-                    continue
-                try:
-                    posts = self._search_service.get_wall_posts(
-                        owner_id, max_posts=self._config.search.max_posts_per_account
-                    )
-                except VKApiError as e:
-                    self._logger.warning(f"Ошибка получения постов пользователя {screen_name}: {e}")
-                    continue
-                _accept(posts)
-
-        if len(all_posts) < enough and self._config.search.auto_friends and self._config.search.user_id:
-            try:
-                friend_ids = self._search_service.get_friends(
-                    self._config.search.user_id,
-                    max_count=self._config.search.max_friends_to_collect,
-                )
-            except VKApiError as e:
-                self._logger.warning(f"Не удалось получить список друзей: {e}")
-                friend_ids = []
-            random.shuffle(friend_ids)
-            for fid in friend_ids[:self._config.search.max_friends_to_collect]:
-                if len(all_posts) >= enough:
-                    self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей")
-                    break
-                try:
-                    posts = self._search_service.get_wall_posts(
-                        fid, max_posts=self._config.search.max_posts_per_friend
-                    )
-                    _accept(posts)
-                except VKApiError as e:
-                    self._logger.warning(f"Ошибка получения постов друга {fid}: {e}")
-                    continue
-
-        if len(all_posts) < enough and self._config.search.auto_groups and self._config.search.user_id:
-            try:
-                group_ids = self._search_service.get_groups(
-                    self._config.search.user_id,
-                    max_count=self._config.search.max_groups_to_collect,
-                )
-            except VKApiError as e:
-                self._logger.warning(f"Не удалось получить список групп: {e}")
-                group_ids = []
-            random.shuffle(group_ids)
-            for gid in group_ids[:self._config.search.max_groups_to_collect]:
-                if len(all_posts) >= enough:
-                    self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных групп")
-                    break
-                try:
-                    posts = self._search_service.get_wall_posts(
-                        gid, max_posts=self._config.search.max_posts_per_group
-                    )
-                    _accept(posts)
-                except VKApiError as e:
-                    self._logger.warning(f"Ошибка получения постов группы {gid}: {e}")
-                    continue
-
-        unique: dict = {}
-        for p in all_posts:
-            key = (p.owner_id, p.item_id)
-            if key not in unique:
-                unique[key] = p
-
-        self._logger.info(f"Собрано {len(unique)} необработанных постов")
-        return list(unique.values())

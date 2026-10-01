@@ -1,33 +1,32 @@
-"""Фильтрация постов по давности, дедупликации и наличию текста."""
+"""Фильтрация постов по давности и наличию текста.
+
+Фильтр проверяет только свойства поста (дата, текст) — без обращения к StateStore.
+Проверка is_processed выполняется в CollectStage, где она нужна для раннего выхода.
+"""
 
 import time
 from typing import List
 
-from post import Post
-from state_store import StateStore
 from config import AppConfig
 from logger import AppLogger
+from post import Post
 
 
 class PostFilter:
-    """Отсеивает посты старше days_back дней, уже обработанные и без текста."""
+    """Отсеивает посты старше days_back дней и без текста."""
 
-    def __init__(self, config: AppConfig, state_store: StateStore, logger: AppLogger):
-        """Инициализирует фильтр с параметром days_back и хранилищем состояния."""
+    def __init__(self, config: AppConfig, logger: AppLogger):
+        """Инициализирует фильтр с параметром days_back."""
         self._days_back = config.search.days_back
-        self._state = state_store
         self._logger = logger
 
     def filter(self, posts: List[Post]) -> List[Post]:
-        """Возвращает только свежие, необработанные посты с непустым текстом."""
+        """Возвращает только свежие посты с непустым текстом."""
         cutoff = int(time.time()) - (self._days_back * 86400)
         result: List[Post] = []
 
         for post in posts:
             if post.date < cutoff:
-                continue
-
-            if self._state.is_processed(post.owner_id, post.item_id):
                 continue
 
             if not post.text.strip():
