@@ -9,7 +9,6 @@ auto_friends → auto_groups. Каждый следующий источник �
 """
 
 import random
-from typing import List
 
 from api_search import ApiSearchService
 from config import AppConfig
@@ -51,10 +50,10 @@ class CollectStage:
             ctx.posts = []
             return ctx
 
-        all_posts: List[Post] = []
+        all_posts: list[Post] = []
         enough = ctx.target_likes * 2
 
-        def _accept(posts: List[Post]) -> None:
+        def _accept(posts: list[Post]) -> None:
             """Фильтрует (PostFilter + is_processed), шафлит, добавляет в all_posts."""
             filtered = self._filter.filter(posts)
             fresh = [

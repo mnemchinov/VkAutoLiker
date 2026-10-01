@@ -1,6 +1,4 @@
-import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -44,6 +42,7 @@ def mock_config_data():
             "max_groups_to_collect": 100,
             "days_back": 7,
             "stop_words": ["политика"],
+            "stop_words_file": "",
         },
         "limits": {
             "likes_per_session_min": 3,
@@ -93,9 +92,9 @@ def mock_driver():
 
 @pytest.fixture
 def http_fixture_server(monkeypatch, tmp_path):
+    import functools
     import http.server
     import threading
-    import functools
 
     fixtures_dir = Path(__file__).parent / "fixtures"
 

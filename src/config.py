@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 import yaml
 
@@ -50,11 +49,11 @@ class SearchConfig:
     days_back — не лайкать посты старше N дней (фильтр по date из API).
     """
 
-    queries: List[str]
+    queries: list[str]
     user_id: int = 0
-    hashtags: List[str] = field(default_factory=list)
-    groups: List[str] = field(default_factory=list)
-    accounts: List[str] = field(default_factory=list)
+    hashtags: list[str] = field(default_factory=list)
+    groups: list[str] = field(default_factory=list)
+    accounts: list[str] = field(default_factory=list)
     auto_friends: bool = False
     auto_groups: bool = False
     max_posts_per_query: int = 100
@@ -65,7 +64,8 @@ class SearchConfig:
     max_friends_to_collect: int = 200
     max_groups_to_collect: int = 200
     days_back: int = 30
-    stop_words: List[str] = field(default_factory=list)
+    stop_words: list[str] = field(default_factory=list)
+    stop_words_file: str = ""
 
 
 @dataclass
@@ -119,14 +119,14 @@ class ConfigLoader:
     def __init__(self, config_path: str = "config.yaml"):
         """Инициализирует загрузчик с путём к YAML-файлу."""
         self._config_path = Path(config_path)
-        self._config: Optional[AppConfig] = None
+        self._config: AppConfig | None = None
 
     def load(self) -> AppConfig:
         """Загружает конфигурацию из YAML, кэширует и возвращает AppConfig."""
         if not self._config_path.exists():
             raise FileNotFoundError(f"Файл конфигурации не найден: {self._config_path}")
 
-        with open(self._config_path, "r", encoding="utf-8") as f:
+        with open(self._config_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         if raw is None:
@@ -166,6 +166,7 @@ class ConfigLoader:
                 max_groups_to_collect=search_raw.get("max_groups_to_collect", 200),
                 days_back=search_raw.get("days_back", 30),
                 stop_words=search_raw.get("stop_words", []),
+                stop_words_file=search_raw.get("stop_words_file", ""),
             ),
             limits=LimitsConfig(
                 likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
