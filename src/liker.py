@@ -10,7 +10,7 @@ import time
 from typing import List
 
 from api_search import ApiSearchService
-from browser_likes import BrowserLikesService
+from browser_likes import BrowserLikesService, LikeResult
 from config import AppConfig
 from logger import AppLogger
 from pipeline import Pipeline, PipelineContext
@@ -20,7 +20,7 @@ from stage_collect import CollectStage
 from stage_dedup import DedupStage
 from state_store import StateStore
 from vk_browser import VKBrowser
-from vk_api_client import VKApiClient
+from vk_api_client import CaptchaError, VKApiClient
 
 
 class AutoLiker:
@@ -84,17 +84,13 @@ class AutoLiker:
         test_post = posts[0]
         self._logger.info(f"Проверка лайка на {test_post.owner_id}_{test_post.item_id}")
 
-        liked = self._likes_service.is_liked(test_post.owner_id, test_post.item_id)
-        self._logger.info(f"Лайк уже стоит: {liked}")
-
-        if not liked:
-            success = self._likes_service.like(test_post.owner_id, test_post.item_id)
-            if success:
-                self._logger.info("Тест лайка: OK")
-            else:
-                self._logger.error("Тест лайка: НЕ УДАЛСЯ")
-        else:
+        result = self._likes_service.like(test_post.owner_id, test_post.item_id)
+        if result == LikeResult.LIKED:
+            self._logger.info("Тест лайка: OK")
+        elif result == LikeResult.ALREADY_LIKED:
             self._logger.info("Лайк уже стоит, путь лайка работает")
+        else:
+            self._logger.error("Тест лайка: НЕ УДАЛСЯ")
 
         self._logger.info("=== Тест завершён ===")
 
@@ -106,6 +102,12 @@ class AutoLiker:
         no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
         сессия записывается с is_auto=True.
         """
+        # Jitter для авто-запуска: размывает фиксированные слоты launchd (10:00, 14:00, 19:00)
+        if not no_limit:
+            jitter = random.uniform(0, 1800)
+            self._logger.info(f"Случайная задержка перед стартом: {jitter:.0f} сек")
+            time.sleep(jitter)
+
         if no_limit:
             self._logger.info("=== Сессия AutoLiker запущена (без учёта лимита) ===")
         else:
@@ -127,9 +129,16 @@ class AutoLiker:
         session_id = self._state.start_session(is_auto=not no_limit)
         likes_count = 0
         already_liked_count = 0
+        captcha_streak = 0
+        likes_since_break = 0
+        next_break_at = random.randint(5, 10)
+        target = random.randint(
+            self._config.limits.likes_per_session_min,
+            self._config.limits.likes_per_session_max,
+        )
 
         try:
-            ctx = PipelineContext(config=self._config)
+            ctx = PipelineContext(config=self._config, target_likes=target)
             ctx = self._pipeline.run(ctx)
             all_posts = ctx.posts
             if not all_posts:
@@ -139,31 +148,45 @@ class AutoLiker:
             self._logger.info(f"Обработка {len(all_posts)} постов")
 
             for post in all_posts:
-                if likes_count >= self._config.limits.likes_per_session:
-                    self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count})")
+                if likes_count >= target:
+                    self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{target})")
+                    break
+
+                # Стоп-условие: серия капч — VK заподозрил автоматизацию
+                if captcha_streak >= self._config.limits.max_captcha_streak:
+                    self._logger.warning(
+                        f"Превышен лимит капч ({captcha_streak}/{self._config.limits.max_captcha_streak}) — остановка сессии"
+                    )
                     break
 
                 if self._state.is_processed(post.owner_id, post.item_id):
                     continue
 
                 try:
-                    liked = self._likes_service.is_liked(post.owner_id, post.item_id)
-                    if liked:
-                        self._state.mark_processed(post.owner_id, post.item_id)
-                        already_liked_count += 1
-                        self._logger.info(f"Уже лайкнут: {post.owner_id}_{post.item_id}")
-                        continue
-
                     self._logger.info(f"Лайкаю {post.owner_id}_{post.item_id}: {post.text[:80]}...")
 
-                    success = self._likes_service.like(post.owner_id, post.item_id)
-                    if success:
+                    result = self._likes_service.like(post.owner_id, post.item_id)
+
+                    if result == LikeResult.LIKED:
                         likes_count += 1
+                        likes_since_break += 1
+                        captcha_streak = 0
                         self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.info(
-                            f"Лайкнут ({likes_count}/{self._config.limits.likes_per_session})"
+                            f"Лайкнут ({likes_count}/{target})"
                         )
-                    else:
+                    elif result == LikeResult.ALREADY_LIKED:
+                        already_liked_count += 1
+                        captcha_streak = 0
+                        self._state.mark_processed(post.owner_id, post.item_id)
+                        self._logger.info(f"Уже лайкнут: {post.owner_id}_{post.item_id}")
+                    elif result == LikeResult.CAPTCHA:
+                        captcha_streak += 1
+                        self._state.mark_processed(post.owner_id, post.item_id)
+                        self._logger.warning(
+                            f"Капча ({captcha_streak}/{self._config.limits.max_captcha_streak}): {post.owner_id}_{post.item_id}"
+                        )
+                    else:  # FAILED
                         self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.warning(f"Лайк не удался: {post.owner_id}_{post.item_id}")
 
@@ -172,12 +195,22 @@ class AutoLiker:
                     self._state.mark_processed(post.owner_id, post.item_id)
                     continue
 
-                delay = random.uniform(
-                    self._config.limits.min_delay_sec, self._config.limits.max_delay_sec
-                )
-                self._logger.info(f"Пауза {delay:.1f} сек перед следующим постом...")
-                time.sleep(delay)
+                # Burst-смягчение: каждые 5-10 лайков — длинная пауза «отвлечения»
+                if likes_since_break >= next_break_at:
+                    long_pause = random.uniform(60, 180)
+                    self._logger.info(f"Длинная пауза для имитации отвлечения: {long_pause:.0f} сек")
+                    time.sleep(long_pause)
+                    likes_since_break = 0
+                    next_break_at = random.randint(5, 10)
+                else:
+                    delay = random.uniform(
+                        self._config.limits.min_delay_sec, self._config.limits.max_delay_sec
+                    )
+                    self._logger.info(f"Пауза {delay:.1f} сек перед следующим постом...")
+                    time.sleep(delay)
 
+        except CaptchaError as e:
+            self._logger.warning(f"Капча от VK API при сборе постов: {e}")
         except KeyboardInterrupt:
             self._logger.info("Прервано пользователем")
         finally:

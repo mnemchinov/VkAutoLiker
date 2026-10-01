@@ -1,4 +1,6 @@
 selenium>=4.15.0
+undetected-chromedriver>=3.5.0
+setuptools>=70.0.0
 requests>=2.31.0
 PyYAML>=6.0
 pytest>=8.0.0

@@ -8,10 +8,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -35,31 +35,56 @@ class VKBrowser:
         self._logger = logger
         self._driver: Optional[WebDriver] = None
 
-    def _create_driver(self) -> WebDriver:
-        """Создаёт Chrome driver с персистентным профилем и антидетект-настройками."""
-        options = Options()
+    @staticmethod
+    def _detect_chrome_version() -> Optional[int]:
+        """Определяет мажорную версию установленного Chrome через subprocess.
 
+        UC без version_main скачивает последний ChromeDriver, который может
+        не совпадать с установленным Chrome. Авто-детект предотвращает
+        SessionNotCreatedException из-за несовпадения версий.
+        """
+        chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        try:
+            result = subprocess.run(
+                [chrome_path, "--version"],
+                capture_output=True, text=True, timeout=5,
+            )
+            # "Google Chrome 145.0.7632.117" → 145
+            version_str = result.stdout.strip().split()[-1]
+            return int(version_str.split(".")[0])
+        except (subprocess.SubprocessError, ValueError, IndexError):
+            return None
+
+    def _create_driver(self, headless: Optional[bool] = None) -> WebDriver:
+        """Создаёт Chrome driver через undetected-chromedriver с персистентным профилем.
+
+        undetected-chromedriver патчит: UA, navigator.webdriver, navigator.plugins,
+        window.chrome, WebGL vendor/renderer, navigator.languages, navigator.permissions.
+        Ручные антидетект-патчи не нужны — UC делает всё сам.
+        version_main определяется авто-детектом, чтобы UC скачал совместимый ChromeDriver.
+        Параметр headless позволяет перекрыть конфиг — login() форсирует False для 2FA.
+        """
+        effective_headless = headless if headless is not None else self._headless
         profile_dir = Path(self._profile_path).resolve()
         profile_dir.mkdir(parents=True, exist_ok=True)
-        options.add_argument(f"--user-data-dir={profile_dir}")
 
-        if self._headless:
-            options.add_argument("--headless=new")
-
+        options = uc.ChromeOptions()
         options.add_argument("--start-maximized")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-        options.add_experimental_option("detach", True)
 
-        driver = webdriver.Chrome(options=options)
-        # Скрываем navigator.webdriver — типичный признак Selenium-автоматизации
-        driver.execute_cdp_cmd(
-            "Page.addScriptToEvaluateOnNewDocument",
-            {
-                "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            },
-        )
+        version_main = self._detect_chrome_version()
+        if version_main is not None:
+            driver = uc.Chrome(
+                options=options,
+                user_data_dir=str(profile_dir),
+                headless=effective_headless,
+                version_main=version_main,
+            )
+        else:
+            driver = uc.Chrome(
+                options=options,
+                user_data_dir=str(profile_dir),
+                headless=effective_headless,
+            )
         return driver
 
     @property
@@ -88,17 +113,23 @@ class VKBrowser:
         except Exception:
             pass
 
-    def start(self) -> None:
-        """Запускает Chrome: завершает stale-процессы, создаёт driver."""
+    def start(self, headless: Optional[bool] = None) -> None:
+        """Запускает Chrome: завершает stale-процессы, создаёт driver.
+
+        Параметр headless перекрывает конфиг — login() передаёт False для 2FA.
+        """
         if self._driver is not None:
             return
         self._kill_stale_chrome()
-        self._driver = self._create_driver()
+        self._driver = self._create_driver(headless=headless)
         self._logger.info("Браузер запущен")
 
     def login(self) -> None:
-        """Открывает vk.ru для ручного логина (включая 2FA) и ждёт подтверждения."""
-        self.start()
+        """Открывает vk.ru для ручного логина (включая 2FA) и ждёт подтверждения.
+
+        Форсирует headless=False — для 2FA нужен видимый экран.
+        """
+        self.start(headless=False)
         self.navigate("https://vk.ru")
         self._logger.info("Открыта страница входа. Войдите вручную (включая 2FA), затем нажмите Enter.")
         input()
@@ -150,11 +181,18 @@ class VKBrowser:
             return False
 
     def click_element(self, element) -> bool:
-        """Кликает по переданному элементу с прокруткой. True, если успешно."""
+        """Кликает по переданному элементу через ActionChains с движением мыши.
+
+        ActionChains генерирует mousemove → mouseover → mousedown → mouseup → click
+        с реальными координатами, в отличие от синтетического element.click().
+        pause между move и click имитирует время реакции человека.
+        """
         try:
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
-            self._random_sleep(0.5, 1.5)
-            element.click()
+            actions = ActionChains(self.driver)
+            actions.move_to_element(element)
+            actions.pause(random.uniform(0.2, 0.8))
+            actions.click()
+            actions.perform()
             return True
         except Exception as e:
             self._logger.debug(f"Клик не удался по элементу: {e}")
