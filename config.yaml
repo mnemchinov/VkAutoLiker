@@ -22,11 +22,11 @@ search:
   accounts: [] # короткие имена пользователей (screen_name) → wall.get
   auto_friends: true # автоматический сбор постов со стен друзей (friends.get → wall.get)
   auto_groups: true # автоматический сбор постов со стен подписок (groups.get → wall.get)
-  max_posts_per_query: 10 # лимит постов с одного текстового запроса
-  max_posts_per_hashtag: 10 # лимит постов с одного хештега
-  max_posts_per_group: 5 # лимит постов со стены одной группы
-  max_posts_per_account: 3 # лимит постов со стены одного пользователя
-  max_posts_per_friend: 3 # лимит постов со стены одного друга
+  max_posts_per_query: 100 # лимит постов с одного текстового запроса
+  max_posts_per_hashtag: 100 # лимит постов с одного хештега (1 API-вызов, пагинация через start_time)
+  max_posts_per_group: 100 # лимит постов со стены одной группы
+  max_posts_per_account: 100 # лимит постов со стены одного пользователя
+  max_posts_per_friend: 10 # лимит постов со стены одного друга
   max_friends_to_collect: 50 # сколько друзей собрать из friends.get (макс. API — 1000)
   max_groups_to_collect: 50 # сколько групп собрать из groups.get (макс. API — 1000)
   days_back: 30 # не лайкать посты старше N дней
