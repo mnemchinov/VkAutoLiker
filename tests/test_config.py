@@ -44,7 +44,8 @@ class TestConfigLoader:
         config = loader.load()
 
         assert isinstance(config.limits, LimitsConfig)
-        assert config.limits.likes_per_session == 5
+        assert config.limits.likes_per_session_min == 3
+        assert config.limits.likes_per_session_max == 5
         assert config.limits.sessions_per_day == 2
         assert config.limits.min_delay_sec == 1
         assert config.limits.max_delay_sec == 2

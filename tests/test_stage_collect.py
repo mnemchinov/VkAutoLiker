@@ -44,7 +44,7 @@ class TestCollectStage:
         collect_stage._search.search = MagicMock(return_value=posts)
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 20
@@ -59,7 +59,7 @@ class TestCollectStage:
         hashtag_posts = [_make_post(2, i) for i in range(20)]
         collect_stage._search.search_hashtag = MagicMock(return_value=hashtag_posts)
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 20
@@ -82,10 +82,10 @@ class TestCollectStage:
 
         collect_stage._search.get_wall_posts = MagicMock(side_effect=wall_side_effect)
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
-        # enough = likes_per_session * 2 = 5 * 2 = 10
+        # enough = target_likes * 2 = 5 * 2 = 10
         # 4 друга × 3 поста = 12 ≥ 10 → early exit
         assert len(result.posts) >= 10
         assert collect_stage._search.get_wall_posts.call_count <= 5
@@ -99,7 +99,7 @@ class TestCollectStage:
             side_effect=lambda owner_id, item_id: (owner_id == 1 and item_id == 2)
         )
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         result_ids = [(p.owner_id, p.item_id) for p in result.posts]
@@ -119,7 +119,7 @@ class TestCollectStage:
         collect_stage._search.resolve_screen_name = MagicMock(return_value=None)
         collect_stage._search.get_wall_posts = MagicMock()
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert result.posts == []
@@ -141,7 +141,7 @@ class TestCollectStage:
             side_effect=[VKApiError(15, "denied"), [_make_post(-222, 1)]]
         )
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 1
@@ -154,7 +154,7 @@ class TestCollectStage:
         collect_stage._search.search = MagicMock(return_value=posts1)
         collect_stage._search.search_hashtag = MagicMock(return_value=posts2)
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         # Дубликат (1, 2) остаётся — DedupStage уберёт
@@ -175,7 +175,7 @@ class TestCollectStage:
             return_value=[_make_post(-111, i) for i in range(5)]
         )
 
-        ctx = PipelineContext(config=mock_config)
+        ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 5

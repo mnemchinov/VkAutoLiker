@@ -75,7 +75,8 @@ class LimitsConfig:
     значений нет нигде в коде.
     """
 
-    likes_per_session: int = 20
+    likes_per_session_min: int = 20
+    likes_per_session_max: int = 30
     sessions_per_day: int = 2
     min_delay_sec: int = 60
     max_delay_sec: int = 120
@@ -165,7 +166,8 @@ class ConfigLoader:
                 days_back=search_raw.get("days_back", 30),
             ),
             limits=LimitsConfig(
-                likes_per_session=limits_raw.get("likes_per_session", 20),
+                likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
+                likes_per_session_max=limits_raw.get("likes_per_session_max", 30),
                 sessions_per_day=limits_raw.get("sessions_per_day", 2),
                 min_delay_sec=limits_raw.get("min_delay_sec", 60),
                 max_delay_sec=limits_raw.get("max_delay_sec", 120),

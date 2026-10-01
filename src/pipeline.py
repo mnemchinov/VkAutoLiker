@@ -14,14 +14,17 @@ from post import Post
 
 @dataclass
 class PipelineContext:
-    """Контекст конвейера: переносит посты и конфиг между стадиями.
+    """Контекст конвейера: переносит посты, конфиг и target_likes между стадиями.
 
     posts — список постов, накапливаемый по мере прохождения стадий.
     config — конфигурация приложения, доступна всем стадиям.
+    target_likes — целевое число лайков в текущей сессии (random от min до max),
+    используется CollectStage для раннего выхода (enough = target_likes * 2).
     """
 
     posts: List[Post] = field(default_factory=list)
     config: AppConfig = None  # type: ignore[assignment]
+    target_likes: int = 0
 
 
 @runtime_checkable

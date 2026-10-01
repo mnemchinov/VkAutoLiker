@@ -45,7 +45,8 @@ def mock_config_data():
             "days_back": 7,
         },
         "limits": {
-            "likes_per_session": 5,
+            "likes_per_session_min": 3,
+            "likes_per_session_max": 5,
             "sessions_per_day": 2,
             "min_delay_sec": 1,
             "max_delay_sec": 2,

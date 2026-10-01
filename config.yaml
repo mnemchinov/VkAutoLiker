@@ -33,7 +33,8 @@ search:
 
 # Лимиты и задержки (все рандомизируются через random.uniform)
 limits:
-  likes_per_session: 30 # макс. лайков за одну сессию
+  likes_per_session_min: 20 # мин. лайков за одну сессию (random от min до max)
+  likes_per_session_max: 30 # макс. лайков за одну сессию
   sessions_per_day: 3 # макс. сессий в день
   min_delay_sec: 15 # мин. пауза между лайками
   max_delay_sec: 60 # макс. пауза между лайками

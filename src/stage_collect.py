@@ -26,7 +26,7 @@ class CollectStage:
 
     Порядок сбора = порядок лайков: лимит расходуется на queries сначала.
     Внутри каждого источника порядок рандомизируется.
-    Ранний выход при достижении enough = likes_per_session * 2.
+    Ранний выход при достижении enough = target_likes * 2.
     """
 
     def __init__(
@@ -47,7 +47,7 @@ class CollectStage:
     def process(self, ctx: PipelineContext) -> PipelineContext:
         """Собирает посты из 6 источников с приоритетом и ранним выходом."""
         all_posts: List[Post] = []
-        enough = self._config.limits.likes_per_session * 2
+        enough = ctx.target_likes * 2
 
         def _accept(posts: List[Post]) -> None:
             """Фильтрует (PostFilter + is_processed), шафлит, добавляет в all_posts."""
