@@ -51,7 +51,7 @@ src/                   — весь код, плоская структура Б
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
   vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: days_back, пустой текст, стоп-слова (без StateStore)
+  post_filter.py       — PostFilter: days_back, пустой текст, стоп-слова (файл + inline, без StateStore)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
@@ -114,7 +114,7 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 84 passed, 3 deselected (live пропускаются)
+pytest                                  # 88 passed, 3 deselected (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
@@ -132,9 +132,10 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
 - Юнит-тесты на моках — ~84 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
-### Проверка изменений (линтеров/форматтеров/CI в проекте нет)
+### Проверка изменений (линтер: ruff)
 
 ```bash
+ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
 .venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, config"
 ```
@@ -163,6 +164,21 @@ pytest -m "not browser and not live"    # базовая страховка по
   и `sys.exit(1)`.
 - Пиковая длина строки — около 100 символов; `snake_case` для функций/атрибутов,
   `PascalCase` для классов, `UPPER_SNAKE` для констант.
+
+### Сообщения комитов
+
+Формат: `type: Краткое описание с большой буквы`
+- **type:** `feat` / `fix` / `docs` / `refactor` / `test` / `chore`
+- **Описание:** на русском, с большой буквы, без точки в конце
+- **Один комит — одна логическая группа изменений**
+- **Файлы не перечислять в сообщении — только заголовок**
+- Без scope в скобках, без body, без footer
+
+Примеры:
+- `feat: Стоп-слова из файла — загрузка и объединение с inline-списком`
+- `fix: Адаптивный сбор друзей/групп`
+- `docs: Актуализация AGENTS.md`
+- `chore: Подключение ruff`
 
 ### Критичные инварианты (не ломать)
 

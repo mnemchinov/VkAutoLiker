@@ -151,7 +151,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `max_friends_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
 | `max_groups_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
 | `days_back` | `30` | — | Не лайкать посты старше N дней |
-| `stop_words` | `[]` | `["политика", "18+"]` | Стоп-слова: посты с этими словами не лайкаются (регистронезависимо) |
+| `stop_words` | `[]` | `["18+"]` | Стоп-слова inline (дополнительные к файлу) |
+| `stop_words_file` | `""` | `"stop_words.txt"` | Файл стоп-слов: одно слово на строку, `#` — комментарий |
 
 ### `limits` — лимиты и задержки
 
@@ -196,7 +197,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 ## Фильтрация
 
 - **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
-- **Стоп-слова:** посты, содержащие слова из `stop_words` (в любом регистре), отбрасываются
+- **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file` (файл), отбрасываются. Списки объединяются. Регистронезависимо. Подстрока (без стемминга — «политика» не поймает «политику»).
 - **Дедупликация:** `is_processed(owner_id, item_id)` в SQLite — пост помечается
   обработанным при успехе, ошибке или исключении
 - **Пустой текст:** посты без текста пропускаются
@@ -290,7 +291,7 @@ src/                   — весь код (плоская структура, �
   config.py            — AppConfig + ConfigLoader (dataclass-модели)
   vk_api_client.py     — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: давность / пустой текст
+  post_filter.py       — PostFilter: давность / пустой текст / стоп-слова (файл + inline)
   vk_browser.py        — VKBrowser: undetected-chromedriver + ActionChains + network retry
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация (data-post-id)
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
@@ -305,7 +306,7 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 84 passed, 3 deselected (live-тесты пропускаются)
+pytest                                  # 88 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
