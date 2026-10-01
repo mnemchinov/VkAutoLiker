@@ -129,6 +129,34 @@ class TestRun:
         liker._likes_service.like.assert_called_once_with(1, 1)
         liker._state.mark_processed.assert_called_once_with(1, 1)
 
+    def test_already_liked_skips_normal_delay(self, liker, mock_config):
+        """Уже лайкнутый пост → короткая skip-пауза, обычная пауза НЕ вызывается."""
+        posts = [_make_post(1, 1)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._state.start_session = MagicMock(return_value=1)
+        liker._state.end_session = MagicMock()
+        liker._state.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.ALREADY_LIKED)
+        liker._state.mark_processed = MagicMock()
+
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=posts))
+
+        uniform_calls = []
+        def track_uniform(a, b):
+            uniform_calls.append((a, b))
+            return 0
+
+        with patch("liker.time.sleep"), patch("liker.random.uniform", side_effect=track_uniform):
+            liker.run(no_limit=True)
+
+        # skip-пауза random.uniform(2, 5) — должна быть
+        assert (2, 5) in uniform_calls
+        # обычная пауза random.uniform(min_delay_sec, max_delay_sec) — НЕ должна быть
+        assert (mock_config.limits.min_delay_sec, mock_config.limits.max_delay_sec) not in uniform_calls
+        # burst-пауза random.uniform(60, 180) — НЕ должна быть
+        assert (60, 180) not in uniform_calls
+
     def test_exception_in_cycle_continues(self, liker, mock_config):
         """Exception при обработке поста → mark_processed, цикл продолжается."""
         posts = [_make_post(1, 1), _make_post(1, 2)]
