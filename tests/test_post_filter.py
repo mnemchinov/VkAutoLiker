@@ -58,3 +58,29 @@ class TestPostFilter:
         ]
         result = pf.filter(posts)
         assert len(result) == 3
+
+    def test_filters_stop_words(self, mock_config, mock_logger):
+        """Посты со стоп-словами отсеиваются (регистронезависимо)."""
+        pf = PostFilter(mock_config, mock_logger)
+
+        posts: List[Post] = [
+            make_post(1, 1, "обычный пост"),
+            make_post(2, 2, "Это ПОЛИТИКА и выборы"),
+            make_post(3, 3, "нейтральный контент"),
+        ]
+        result = pf.filter(posts)
+        assert len(result) == 2
+        assert result[0].owner_id == 1
+        assert result[1].owner_id == 3
+
+    def test_empty_stop_words_allows_all(self, mock_config, mock_logger):
+        """Пустой список стоп-слов не отсеивает ничего."""
+        mock_config.search.stop_words = []
+        pf = PostFilter(mock_config, mock_logger)
+
+        posts: List[Post] = [
+            make_post(1, 1, "любой текст"),
+            make_post(2, 2, "политика"),
+        ]
+        result = pf.filter(posts)
+        assert len(result) == 2

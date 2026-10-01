@@ -43,6 +43,7 @@ def mock_config_data():
             "max_friends_to_collect": 100,
             "max_groups_to_collect": 100,
             "days_back": 7,
+            "stop_words": ["политика"],
         },
         "limits": {
             "likes_per_session_min": 3,
