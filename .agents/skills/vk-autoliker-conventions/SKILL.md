@@ -74,14 +74,14 @@ VK — React-приложение. После клика `aria-label` меняе
 ### 9. `is_processed` фильтруется при сборе
 
 `_collect_posts()` в `liker.py` проверяет `StateStore.is_processed()` после
-`PostFilter.filter()` и **до** добавления в `all_posts`. Ранний выход
+`FilterChain.filter()` и **до** добавления в `all_posts`. Ранний выход
 `enough = target_likes * 2` считает только необработанные посты.
 
 ### 10. Друзья и группы перемешиваются, итерируются до early-exit или safety-капа
 
 `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
 возвращают полный список. `CollectStage` делает `random.shuffle()` и итерирует по всем,
-проверяя `is_processed` + `PostFilter` inline. Early-exit при `len(all_posts) >= enough`.
+проверяя `is_processed` + `FilterChain` inline. Early-exit при `len(all_posts) >= enough`.
 `max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
 `wall.get` (не срез списка): достигнут → `break`.
 

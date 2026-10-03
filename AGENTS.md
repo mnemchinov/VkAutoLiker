@@ -21,13 +21,14 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `CollectStage (PostFilter + is_processed + ранний выход)` → `DedupStage (дедупликация)` → `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
+`VK API (сбор постов)` → `CollectStage (FilterChain: date + empty + stop_words + is_processed + ранний выход)` → `DedupStage (дедупликация)` → `LLMFilterStage (опционально, filter_mode=="llm")` → `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
 ### Стек
 
 - **Язык:** Python 3.14 (venv: `.venv/`)
 - **Зависимости** (`requirements.txt`): `selenium>=4.15.0`, `requests>=2.31.0`,
-  `PyYAML>=6.0`, `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`
+  `PyYAML>=6.0`, `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`,
+  `litellm`, `ruff>=0.6.0`
 - **Хранилище состояния:** SQLite (стандартная библиотека `sqlite3`), файл `vk_autoliker.db`
 - **Конфигурация:** один YAML-файл `config.yaml` в корне
 - **Логирование:** стандартный `logging`, консоль + файл `vk_autoliker.log`
@@ -51,13 +52,15 @@ src/                   — весь код, плоская структура Б
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
   vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: days_back, пустой текст, стоп-слова (файл + inline, без StateStore)
+  post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter (декомпозиция PostFilter)
+  stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
   pipeline.py          — Pipeline + PipelineContext + Stage Protocol
-  stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline
+  stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline через FilterChain
   stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
+stop_words.txt         — словарь стоп-слов (одна тема — одна строка, # — комментарий)
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset)
@@ -114,12 +117,12 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 88 passed, 3 deselected (live пропускаются)
+pytest                                  # 109 passed, 3 deselected (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_config.py -v          # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -129,7 +132,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — ~84 тестов, маркер не нужен.
+- Юнит-тесты на моках — ~106 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -137,7 +140,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, config"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, stage_llm_filter, config"
 ```
 
 ---
@@ -210,14 +213,14 @@ pytest -m "not browser and not live"    # базовая страховка по
    сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
    `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
-   в `stage_collect.py` проверяет `StateStore.is_processed()` после `PostFilter.filter()` и **до**
+   в `stage_collect.py` проверяет `StateStore.is_processed()` после `FilterChain.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
    необработанные посты, иначе нижестоящие источники пропускались бы зря.
-    `PostFilter` больше не зависит от `StateStore` — проверяет только `days_back`, пустой текст и стоп-слова.
+    `FilterChain` не зависит от `StateStore` — проверяет только `days_back`, пустой текст и стоп-слова.
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
-    проверяя `is_processed` + `PostFilter` inline. Early-exit при `len(all_posts) >= enough`.
+    проверяя `is_processed` + `FilterChain` inline. Early-exit при `len(all_posts) >= enough`.
     `max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
     `wall.get` (не срез списка): достигнут → `break`. Каждая сессия работает со случайным
     подмножеством, а не с одними и теми же первыми N.
@@ -239,11 +242,21 @@ pytest -m "not browser and not live"    # базовая страховка по
     `subprocess` и передаёт `version_main` в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
 18. **Config validation.** `ConfigLoader._validate()` проверяет `min <= max` для всех
     пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`.
+19. **Декомпозиция PostFilter.** `post_filter.py` содержит `PostFilterProtocol` (Protocol),
+    `DateFilter`, `EmptyTextFilter`, `StopWordsFilter`, `LLMTopicFilter` (один класс — одна проверка) и
+    `FilterChain` (композит, `filter(posts) -> list[Post]`; LLMTopicFilter в цепочку не входит —
+    вызывается только через `LLMFilterStage`). `CollectStage._accept()` вызывает
+    `FilterChain.filter()` inline — ранний выход сохранён.
+20. **LLM-фильтрация опциональна.** `filter_mode` в `SearchConfig`: `"stop_words"` (по умолчанию)
+    или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
+    каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
+    (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
 
 ### Практики тестирования
 
 - Один класс тестов на модуль: `TestConfigLoader`, `TestVKApiClient`, `TestApiSearchService`,
-  `TestPostFilter`, `TestStateStore`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
+  `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
+  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestStateStore`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
   `patch("vk_api_client.requests.get")` и `patch("vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.

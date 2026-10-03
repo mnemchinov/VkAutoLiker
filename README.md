@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-109%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
@@ -28,8 +28,9 @@
 **Цепочка данных:**
 ```
 VK API (сбор постов с реальными датами)
-  → CollectStage (PostFilter + is_processed + ранний выход)
+  → CollectStage (FilterChain: date + empty + stop_words + is_processed + ранний выход)
   → DedupStage (дедупликация по owner_id + item_id)
+  → LLMFilterStage (опционально, filter_mode=="llm")
   → Selenium (навигация → «чтение» → клик по лайку)
   → проверка aria-label → запись в SQLite
 ```
@@ -153,6 +154,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `days_back` | `30` | — | Не лайкать посты старше N дней |
 | `stop_words` | `[]` | `["18+"]` | Стоп-слова inline (дополнительные к файлу) |
 | `stop_words_file` | `""` | `"stop_words.txt"` | Файл стоп-слов: одно слово на строку, `#` — комментарий |
+| `filter_mode` | `"stop_words"` | `"llm"` | Режим фильтрации: `"stop_words"` (по умолчанию) или `"llm"` (LLM-классификация) |
 
 ### `limits` — лимиты и задержки
 
@@ -176,6 +178,17 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `logging.level` | `INFO` | Уровень логирования (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
 | `logging.file` | `vk_autoliker.log` | Файл логов |
 | `state.db_path` | `vk_autoliker.db` | Путь к SQLite-базе |
+
+### `llm` — параметры LLM-фильтрации (опционально, `filter_mode: "llm"`)
+
+| Параметр | По умолч. | Пример | Описание |
+|---|---|---|---|
+| `llm.model` | `"gpt-4o-mini"` | `"claude-3-haiku-20240307"` | Идентификатор модели (через litellm) |
+| `llm.api_base` | `""` | `"https://api.openai.com/v1"` | Базовый URL API (пусто = default провайдера) |
+| `llm.api_key` | `""` | `"sk-..."` | API-ключ провайдера (НЕ коммитить в git) |
+| `llm.system_prompt` | (встроенный промпт) | — | Системный промпт для классификации тематики |
+| `llm.timeout` | `10` | `30` | Таймаут запроса к LLM (сек) |
+| `llm.max_text_length` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
 
 ## Источники постов
 
@@ -203,6 +216,10 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 - **Пустой текст:** посты без текста пропускаются
 - **Уже лайкнутые:** проверка `aria-label` в браузере (ловит посты, лайкнутые вручную
   вне инструмента, но не записанные в SQLite)
+- **LLM-фильтрация (опционально):** при `filter_mode: "llm"` посты классифицируются через
+  `litellm.completion()` — LLM определяет тематику и отсеивает нежелательные темы (политика,
+  секс, религия, алкоголь, наркотики, азартные игры, оружие, экстремизм, крипта). Ошибка LLM →
+  пост пропускается дальше (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
 
 ## Антидетект
 
@@ -291,13 +308,15 @@ src/                   — весь код (плоская структура, �
   config.py            — AppConfig + ConfigLoader (dataclass-модели)
   vk_api_client.py     — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — PostFilter: давность / пустой текст / стоп-слова (файл + inline)
+  post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter
+  stage_llm_filter.py  — LLMFilterStage: pipeline-стадия LLM-фильтрации (опц., после DedupStage)
   vk_browser.py        — VKBrowser: undetected-chromedriver + ActionChains + network retry
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация (data-post-id)
   state_store.py       — StateStore: SQLite (processed_posts, sessions)
   pipeline.py          — Pipeline + PipelineContext + Stage Protocol
   stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline
   stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
+stop_words.txt         — словарь стоп-слов (одна тема — одна строка, # — комментарий)
 tests/                 — pytest-тесты + HTML-фикстура для браузерных тестов
 chrome_profile/        — профиль Chrome (в .gitignore)
 vk_autoliker.db        — SQLite база (в .gitignore)
@@ -306,11 +325,11 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 88 passed, 3 deselected (live-тесты пропускаются)
+pytest                                  # 109 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
-pytest --cov=src --cov-report=term-missing  # с покрытием (73%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
 ```
 
 Три уровня:

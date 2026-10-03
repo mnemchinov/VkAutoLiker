@@ -104,5 +104,7 @@ class MyService:
 | `BrowserLikesService` | `browser_likes.py` | Клик по лайку через Selenium + верификация |
 | `VKBrowser` | `vk_browser.py` | Обёртка над Selenium + антидетект + stale Chrome cleanup |
 | `StateStore` | `state_store.py` | SQLite: processed_posts, sessions |
-| `PostFilter` | `post_filter.py` | Фильтрация: days_back, дубли, пустой текст, стоп-слова |
+| `FilterChain` | `post_filter.py` | Композит: DateFilter + EmptyTextFilter + StopWordsFilter |
+| `LLMTopicFilter` | `post_filter.py` | LLM-фильтр тематики (PostFilterProtocol, litellm) |
+| `LLMFilterStage` | `stage_llm_filter.py` | Pipeline-стадия: LLM-фильтрация после DedupStage (опц.) |
 | `AutoLiker` | `liker.py` | Оркестратор: сбор → фильтрация → лайки → запись |
