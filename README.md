@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-124%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-75%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-127%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
@@ -27,17 +27,31 @@
 
 **Цепочка данных:**
 ```
-VK API (сбор постов с реальными датами)
-  → CollectStage (FilterChain: date + empty + stop_words + is_processed + ранний выход)
-  → DedupStage (дедупликация по owner_id + item_id)
-  → LLMFilterStage (опционально, filter_mode=="llm")
+VK API (сбор постов)
+  → Сбор и фильтрация:
+      ├ отсеиваем: старые, пустые, по стоп-словам (опционально), свои посты
+      ├ пропускаем уже обработанные (SQLite)
+      ├ 6 источников по приоритету (запросы → хештеги → группы → аккаунты → друзья → подписки)
+      ├ случайный порядок внутри каждого источника
+      ├ ранний выход: набрали достаточно — остальные источники пропускаем
+      └ закрытые/приватные стены запоминаем и больше не запрашиваем (N дней)
+  → Дедупликация (по автору + ID поста)
+  → LLM-фильтрация (опционально)
   → Selenium (навигация → «чтение» → клик по лайку)
-  → проверка aria-label → запись в SQLite
+  → проверка в браузере, стоит ли уже лайк → запись в SQLite
 ```
 
 ## Быстрый старт
 
-### 1. Установка
+### Обязательные требования
+
+1. **Google Chrome** — должен быть установлен в системе
+2. **Service-токен VK API** — получить на https://dev.vk.ru/ru/admin/create-app,
+   скопировать service-ключ в разделе «Ключи доступа».
+   Лимит без верификации приложения: 10 000 вызовов/мес.
+3. **VK ID пользователя** — числовой ID вашего аккаунта (для сбора постов друзей/подписок)
+
+### Установка
 
 ```bash
 git clone <repo>
@@ -47,30 +61,20 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Требуется установленный Google Chrome.
+### Заполнить `.env`
 
-### 2. Получить service-токен VK API
-
-1. Создать приложение: https://dev.vk.ru/ru/admin/create-app
-2. Скопировать service-ключ в разделе «Ключи доступа»
-3. Лимит без верификации приложения: 10 000 вызовов/мес
-
-### 3. Заполнить `.env`
-
-Минимум для работы — файл `.env` в корне проекта (в `.gitignore`):
+Файл `.env` в корне проекта (в `.gitignore`):
 
 ```
 VK_SERVICE_TOKEN=ваш_service_токен
-VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: llm
 VK_USER_ID=12345678                     # ваш VK ID (числовой)
-VK_HASHTAGS=#вашХештег,#другойХештег    # comma-separated, хотя бы один источник
+VK_HASHTAGS=#вашХештег,#другойХештег    # через запятую (необязательно)
 VK_AUTO_FRIENDS=true                    # собирать посты со стен друзей
 VK_AUTO_GROUPS=true                     # собирать посты со стен подписок
+VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: llm
 ```
 
-Остальные параметры — см. [Параметры Settings](#параметры-settings).
-
-### 4. Первичный вход в VK
+### Первичный вход в VK
 
 ```bash
 python src/main.py login
@@ -82,7 +86,7 @@ python src/main.py login
 Команда `login` форсирует `headless=False` независимо от `Settings` — для 2FA
 нужен видимый экран.
 
-### 5. Проверка (один пост)
+### Проверка (один пост)
 
 ```bash
 python src/main.py test
@@ -91,7 +95,7 @@ python src/main.py test
 Проверяет API-поиск и ставит один лайк через браузер. Убедитесь, что лайк
 появился на стене.
 
-### 6. Боевая сессия
+### Боевая сессия
 
 ```bash
 python src/main.py run             # запуск с учётом дневного лимита
@@ -105,11 +109,14 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | Команда | Назначение |
 |---|---|
 | `python src/main.py login` | Первичный вход в VK (видимое окно, 2FA) |
-| `python src/main.py run` | Основная сессия лайкинга |
+| `python src/main.py run` | Основная сессия лайкинга (с дневным лимитом) |
 | `python src/main.py run --no-limit` | Ручной запуск без дневного лимита |
 | `python src/main.py test` | Диагностика: поиск + лайк на одном посте |
 | `python src/main.py status` | Статистика: сессии/лайки за сегодня и всего |
-| `python src/main.py reset` | Очистка SQLite (обработанные посты и сессии) |
+| `python src/main.py reset` | Очистка SQLite (обработанные посты, сессии, кэш стен) |
+| `pytest` | Запуск тестов |
+| `pytest -m "not browser and not live"` | Только юнит-тесты (без браузера и сети) |
+| `pytest --cov=src --cov-report=term-missing` | Тесты с покрытием |
 
 Если команда не указана — по умолчанию выполняется `run`.
 
@@ -177,7 +184,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `log_level` | `VK_LOG_LEVEL` | `INFO` | Уровень логирования (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
 | `log_file` | `VK_LOG_FILE` | `vk_autoliker.log` | Файл логов |
 | `db_path` | `VK_DB_PATH` | `vk_autoliker.db` | Путь к SQLite-базе |
-| `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | TTL кэша закрытых стен (дней) |
+| `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | Сколько дней не запрашивать закрытые/приватные стены |
 | `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш |
 
 ### LLM-фильтрация (опционально, `filter_mode: "llm"`)
@@ -205,7 +212,7 @@ VK_LLM_API_KEY=ollama
 VK_LLM_SSL_VERIFY=true
 ```
 
-**your-model-name** (корпоративный endpoint, reasoning-модель):
+**Любая OpenAI-совместимая модель:**
 
 ```dotenv
 VK_LLM_MODEL=openai/your-model-name
@@ -217,10 +224,10 @@ VK_LLM_SSL_VERIFY=false
 > **Префикс `openai/`** в `llm_model` обязателен — litellm по нему определяет
 > OpenAI-совместимый протокол. Без префикса litellm не найдёт провайдера.
 >
-> **Reasoning-модели** (your-model-name, o1, o3) тратят токены на `reasoning_content`
-> перед ответом: ~200+ токенов на размышление + ~2 на ответ «SKIP»/«OK». Если
-> `llm_max_tokens` слишком мал (5), все токены уйдут на reasoning, `content`
-> останется пустым. Дефолт `500` — запас для reasoning + ответ.
+> **Reasoning-модели** (o1, o3 и подобные) тратят токены на размышление перед
+> ответом: ~200+ токенов на reasoning + ~2 на ответ «SKIP»/«OK». Если
+> `llm_max_tokens` слишком мал, все токены уйдут на размышление и ответ
+> останется пустым. Дефолт `1000` — запас для reasoning + ответ.
 
 ## Источники постов
 
@@ -239,15 +246,22 @@ VK_LLM_SSL_VERIFY=false
 Друзья и группы перетасовываются перед выборкой — каждая сессия берёт случайное
 подмножество, а не одни и те же первые N.
 
+**Закрытые стены:** недоступные, удалённые и приватные стены запоминаются в SQLite
+и не запрашиваются повторно в течение `closed_wall_ttl_days` (7 дней по умолчанию).
+Это экономит ~38% API-вызовов к друзьям.
+
 ## Фильтрация
 
 - **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
-- **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file` (файл), отбрасываются. Списки объединяются. Регистронезависимо. Русские слова проходят лемматизацию через `pymorphy3`: стоп-слово «церковь» находит «церковью», «церкви», «церковного». Нерусские слова и аббревиатуры — substring-поиск.
-- **Дедупликация:** `is_processed(owner_id, item_id)` в SQLite — пост помечается
-  обработанным при успехе, ошибке или исключении
-- **Пустой текст:** посты без текста пропускаются
-- **Уже лайкнутые:** проверка `aria-label` в браузере (ловит посты, лайкнутые вручную
-  вне инструмента, но не записанные в SQLite)
+- **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file`
+  (файл), отбрасываются. Списки объединяются. Регистронезависимо. Русские слова проходят
+  лемматизацию через `pymorphy3`: стоп-слово «церковь» находит «церковью», «церкви»,
+  «церковного». Нерусские слова и аббревиатуры — substring-поиск.
+- **Свои посты:** посты, написанные вашим аккаунтом на чужих стенах, не лайкаются
+- **Дубликаты:** повторяющиеся посты (по паре автор + ID) пропускаются
+- **Уже обработанные:** посты, записанные в SQLite как обработанные, пропускаются
+- **Уже лайкнутые:** проверка в браузере — если лайк уже стоит, пост пропускается
+  (ловит посты, лайкнутые вручную вне инструмента)
 - **LLM-фильтрация (опционально):** при `filter_mode: "llm"` посты классифицируются через
   `litellm.completion()` — LLM определяет тематику и отсеивает нежелательные темы (политика,
   секс, религия, алкоголь, наркотики, азартные игры, оружие, экстремизм, крипта). Ошибка LLM →
@@ -264,8 +278,8 @@ VK_LLM_SSL_VERIFY=false
 - Человеческое поведение: скролл, движение мыши, паузы «чтения»
 - Друзья/группы — случайная выборка каждую сессию
 - Рандомизация лайков за сессию: `random.randint(min, max)`
-- Защита от двойного запуска через `fcntl.flock`
-- Retry при сбоях сети в `is_logged_in()` и `VKApiClient.call()`
+- Защита от двойного запуска (на macOS/Linux)
+- Retry при сбоях сети в проверке авторизации и API-вызовах
 
 ## Автоматизация
 
@@ -325,48 +339,6 @@ schtasks /query /tn "VkAutoLiker_*"       # статус
 schtasks /delete /tn "VkAutoLiker_10" /f  # удалить задачу
 ```
 
-**Примечание:** на Windows `fcntl.flock` недоступен — защита от двойного запуска
-работает только на macOS/Linux. Task Scheduler не запускает процесс дважды, поэтому
+**Примечание:** на Windows защита от двойного запуска недоступна — она работает
+только на macOS/Linux. Task Scheduler не запускает процесс дважды, поэтому
 это не критично.
-
-## Структура проекта
-
-```
-.env                   — env vars: секреты + не-дефолтные параметры (VK_SERVICE_TOKEN, VK_LLM_API_KEY, ...); в .gitignore
-requirements.txt       — зависимости
-src/                   — весь код (плоская структура, без __init__.py)
-  main.py              — CLI: login | run | test | status | reset + fcntl file lock
-  liker.py             — AutoLiker: оркестратор цикла
-settings.py             — Settings(BaseSettings): env vars + .env + дефолты (pydantic-settings)
-  vk_api_client.py     — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
-  api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter
-  stage_llm_filter.py  — LLMFilterStage: pipeline-стадия LLM-фильтрации (опц., после DedupStage)
-  vk_browser.py        — VKBrowser: undetected-chromedriver + ActionChains + network retry
-  browser_likes.py     — BrowserLikesService: клик по лайку + верификация (data-post-id)
-  state_store.py       — StateStore: SQLite (processed_posts, sessions)
-  pipeline.py          — Pipeline + PipelineContext + Stage Protocol
-  stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline
-  stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
-stop_words.txt         — словарь стоп-слов (одна тема — одна строка, # — комментарий)
-tests/                 — pytest-тесты + HTML-фикстура для браузерных тестов
-chrome_profile/        — профиль Chrome (в .gitignore)
-vk_autoliker.db        — SQLite база (в .gitignore)
-```
-
-## Тесты
-
-```bash
-pytest                                  # 124 passed, 3 deselected (live-тесты пропускаются)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
-pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
-pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
-pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
-```
-
-Три уровня:
-1. **Mock WebDriver** (116 тестов) — быстрые юнит-тесты, без браузера и сети
-2. **HTML-фикстура** (1 тест, маркер `browser`) — локальный `http.server` + headless Chrome против `vk_post.html`
-3. **Live** (2 теста, маркер `live`) — e2e на реальном посте VK; `pytest.skip` по умолчанию, запускаются только вручную после `login`
-
-Все пути к БД в тестах подменяются на `tmp_path` — реальная база не затрагивается.
