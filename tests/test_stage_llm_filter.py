@@ -6,9 +6,6 @@ litellm.completion мокается через patch — реальных зап
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from config import LLMConfig
 from pipeline import PipelineContext
 from post import Post, build_post_url
 
@@ -35,64 +32,53 @@ def _mock_llm_response(answer: str) -> MagicMock:
 class TestLLMTopicFilter:
     """Тесты LLMTopicFilter.should_skip."""
 
-    @pytest.fixture
-    def llm_config(self):
-        return LLMConfig(
-            model="openai/gpt-4o-mini",
-            api_base="",
-            api_key="test-key",
-            system_prompt="",
-            timeout=10,
-            max_text_length=500,
-        )
-
-    def test_skip_when_llm_says_skip(self, llm_config, mock_logger):
+    def test_skip_when_llm_says_skip(self, mock_config, mock_logger):
         """LLM ответил SKIP → should_skip True."""
         from post_filter import LLMTopicFilter
 
-        f = LLMTopicFilter(llm_config, mock_logger)
+        f = LLMTopicFilter(mock_config, mock_logger)
         post = _make_post(1, 1, "политический пост")
 
         with patch("litellm.completion", return_value=_mock_llm_response("SKIP")):
             assert f.should_skip(post) is True
 
-    def test_keep_when_llm_says_ok(self, llm_config, mock_logger):
+    def test_keep_when_llm_says_ok(self, mock_config, mock_logger):
         """LLM ответил OK → should_skip False."""
         from post_filter import LLMTopicFilter
 
-        f = LLMTopicFilter(llm_config, mock_logger)
+        f = LLMTopicFilter(mock_config, mock_logger)
         post = _make_post(1, 1, "обычный пост")
 
         with patch("litellm.completion", return_value=_mock_llm_response("OK")):
             assert f.should_skip(post) is False
 
-    def test_keep_on_llm_exception(self, llm_config, mock_logger):
+    def test_keep_on_llm_exception(self, mock_config, mock_logger):
         """Ошибка LLM → should_skip False (безопаснее оставить)."""
         from post_filter import LLMTopicFilter
 
-        f = LLMTopicFilter(llm_config, mock_logger)
+        f = LLMTopicFilter(mock_config, mock_logger)
         post = _make_post(1, 1, "любой пост")
 
         with patch("litellm.completion", side_effect=RuntimeError("timeout")):
             assert f.should_skip(post) is False
 
-    def test_empty_text_not_sent(self, llm_config, mock_logger):
+    def test_empty_text_not_sent(self, mock_config, mock_logger):
         """Пустой текст → should_skip False без вызова LLM."""
         from post_filter import LLMTopicFilter
 
-        f = LLMTopicFilter(llm_config, mock_logger)
+        f = LLMTopicFilter(mock_config, mock_logger)
         post = _make_post(1, 1, "   ")
 
         with patch("litellm.completion") as mock_completion:
             assert f.should_skip(post) is False
             mock_completion.assert_not_called()
 
-    def test_text_truncated_to_max_length(self, llm_config, mock_logger):
-        """Текст обрезается до max_text_length перед отправкой в LLM."""
+    def test_text_truncated_to_max_length(self, mock_config, mock_logger):
+        """Текст обрезается до llm_max_text_length перед отправкой в LLM."""
         from post_filter import LLMTopicFilter
 
-        llm_config.max_text_length = 10
-        f = LLMTopicFilter(llm_config, mock_logger)
+        mock_config.llm_max_text_length = 10
+        f = LLMTopicFilter(mock_config, mock_logger)
         long_text = "А" * 1000
         post = _make_post(1, 1, long_text)
 
@@ -101,11 +87,11 @@ class TestLLMTopicFilter:
             sent_text = mock_c.call_args.kwargs["messages"][1]["content"]
             assert len(sent_text) <= 10
 
-    def test_skip_in_answer_detected(self, llm_config, mock_logger):
+    def test_skip_in_answer_detected(self, mock_config, mock_logger):
         """Ответ содержит 'SKIP' (с пробелами/регистром) → отсеивание."""
         from post_filter import LLMTopicFilter
 
-        f = LLMTopicFilter(llm_config, mock_logger)
+        f = LLMTopicFilter(mock_config, mock_logger)
         post = _make_post(1, 1, "пост")
 
         with patch("litellm.completion", return_value=_mock_llm_response("  skip  ")):

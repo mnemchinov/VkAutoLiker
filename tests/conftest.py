@@ -3,7 +3,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -16,77 +15,55 @@ def tmp_db_path(tmp_path):
 @pytest.fixture
 def mock_config_data():
     return {
-        "api": {
-            "service_token": "test_token",
-            "api_version": "5.131",
-            "base_url": "https://api.vk.ru/method",
-        },
-        "browser": {
-            "profile_path": "./test_chrome_profile",
-            "headless": True,
-        },
-        "search": {
-            "queries": ["тест", "Python"],
-            "user_id": 12345,
-            "hashtags": ["#тест", "#Python"],
-            "groups": [],
-            "accounts": ["magnit"],
-            "auto_friends": False,
-            "auto_groups": False,
-            "max_posts_per_query": 10,
-            "max_posts_per_hashtag": 10,
-            "max_posts_per_group": 10,
-            "max_posts_per_account": 100,
-            "max_posts_per_friend": 50,
-            "max_friends_to_collect": 100,
-            "max_groups_to_collect": 100,
-            "days_back": 7,
-            "stop_words": ["политика"],
-            "stop_words_file": "",
-            "filter_mode": "stop_words",
-        },
-        "limits": {
-            "likes_per_session_min": 3,
-            "likes_per_session_max": 5,
-            "sessions_per_day": 2,
-            "min_delay_sec": 1,
-            "max_delay_sec": 2,
-            "view_delay_min_sec": 1,
-            "view_delay_max_sec": 2,
-            "max_captcha_streak": 3,
-        },
-        "logging": {
-            "level": "DEBUG",
-            "file": "test_autoliker.log",
-        },
-        "state": {
-            "db_path": "test_state.db",
-        },
-        "llm": {
-            "model": "openai/gpt-4o-mini",
-            "api_base": "",
-            "api_key": "test-llm-key",
-            "system_prompt": "",
-            "timeout": 10,
-            "max_text_length": 500,
-        },
+        "service_token": "test_token",
+        "api_version": "5.131",
+        "base_url": "https://api.vk.ru/method",
+        "profile_path": "./test_chrome_profile",
+        "headless": True,
+        "queries": ["тест", "Python"],
+        "user_id": 12345,
+        "hashtags": ["#тест", "#Python"],
+        "groups": [],
+        "accounts": ["magnit"],
+        "auto_friends": False,
+        "auto_groups": False,
+        "max_posts_per_query": 10,
+        "max_posts_per_hashtag": 10,
+        "max_posts_per_group": 10,
+        "max_posts_per_account": 100,
+        "max_posts_per_friend": 50,
+        "max_friends_to_collect": 100,
+        "max_groups_to_collect": 100,
+        "days_back": 7,
+        "stop_words": ["политика"],
+        "stop_words_file": "",
+        "filter_mode": "stop_words",
+        "likes_per_session_min": 3,
+        "likes_per_session_max": 5,
+        "sessions_per_day": 2,
+        "min_delay_sec": 1,
+        "max_delay_sec": 2,
+        "view_delay_min_sec": 1,
+        "view_delay_max_sec": 2,
+        "max_captcha_streak": 3,
+        "log_level": "DEBUG",
+        "log_file": "test_autoliker.log",
+        "db_path": "test_state.db",
+        "llm_model": "openai/gpt-4o-mini",
+        "llm_api_base": "",
+        "llm_api_key": "test-llm-key",
+        "llm_system_prompt": "",
+        "llm_timeout": 10,
+        "llm_max_text_length": 500,
     }
 
 
 @pytest.fixture
-def mock_config_file(tmp_path, mock_config_data):
-    config_file = tmp_path / "config.yaml"
-    with open(config_file, "w", encoding="utf-8") as f:
-        yaml.dump(mock_config_data, f, allow_unicode=True)
-    return str(config_file)
-
-
-@pytest.fixture
-def mock_config(mock_config_file, monkeypatch):
-    from config import load_config
+def mock_config(mock_config_data, monkeypatch):
+    from settings import Settings
     monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
     monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
-    return load_config(mock_config_file, _env_file=None)
+    return Settings(_env_file=None, **mock_config_data)
 
 
 @pytest.fixture

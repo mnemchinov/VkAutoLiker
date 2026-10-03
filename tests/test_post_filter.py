@@ -24,12 +24,12 @@ def make_post(owner_id: int, item_id: int, text: str = "text", days_ago: int = 0
 class TestDateFilter:
     def test_skips_old_posts(self, mock_config):
         """Посты старше days_back отсеиваются."""
-        f = DateFilter(mock_config.search.days_back)
+        f = DateFilter(mock_config.days_back)
         assert f.should_skip(make_post(1, 1, "old", days_ago=30)) is True
 
     def test_keeps_fresh_posts(self, mock_config):
         """Свежие посты проходят."""
-        f = DateFilter(mock_config.search.days_back)
+        f = DateFilter(mock_config.days_back)
         assert f.should_skip(make_post(1, 1, "fresh", days_ago=1)) is False
 
 
@@ -63,8 +63,8 @@ class TestStopWordsFilter:
 
     def test_empty_stop_words_allows_all(self, mock_config, mock_logger):
         """Пустой список стоп-слов не отсеивает ничего."""
-        mock_config.search.stop_words = []
-        mock_config.search.stop_words_file = ""
+        mock_config.stop_words = []
+        mock_config.stop_words_file = ""
         f = StopWordsFilter(mock_config, mock_logger)
         assert f.should_skip(make_post(1, 1, "политика")) is False
 
@@ -73,8 +73,8 @@ class TestStopWordsFilter:
         sw_file = tmp_path / "stop.txt"
         sw_file.write_text("# Комментарий\n\nнаркотики\n\nказино\n", encoding="utf-8")
 
-        mock_config.search.stop_words = []
-        mock_config.search.stop_words_file = str(sw_file)
+        mock_config.stop_words = []
+        mock_config.stop_words_file = str(sw_file)
         f = StopWordsFilter(mock_config, mock_logger)
 
         assert f.should_skip(make_post(1, 1, "пост про НАРКОТИКИ")) is True
@@ -83,8 +83,8 @@ class TestStopWordsFilter:
 
     def test_stop_words_file_not_found(self, mock_config, mock_logger):
         """Отсутствующий файл стоп-слов — warning, работа продолжается."""
-        mock_config.search.stop_words = ["спам"]
-        mock_config.search.stop_words_file = "/nonexistent/stop_words.txt"
+        mock_config.stop_words = ["спам"]
+        mock_config.stop_words_file = "/nonexistent/stop_words.txt"
         f = StopWordsFilter(mock_config, mock_logger)
 
         assert f.should_skip(make_post(1, 1, "пост со словом спам")) is True
@@ -95,8 +95,8 @@ class TestStopWordsFilter:
         sw_file = tmp_path / "stop.txt"
         sw_file.write_text("казино\n", encoding="utf-8")
 
-        mock_config.search.stop_words = ["политика"]
-        mock_config.search.stop_words_file = str(sw_file)
+        mock_config.stop_words = ["политика"]
+        mock_config.stop_words_file = str(sw_file)
         f = StopWordsFilter(mock_config, mock_logger)
 
         assert f.should_skip(make_post(1, 1, "пост про политика")) is True
@@ -108,8 +108,8 @@ class TestStopWordsFilter:
         sw_file = tmp_path / "stop.txt"
         sw_file.write_text("# заголовок\n\nполитика\n  # ещё комментарий\n\n", encoding="utf-8")
 
-        mock_config.search.stop_words = []
-        mock_config.search.stop_words_file = str(sw_file)
+        mock_config.stop_words = []
+        mock_config.stop_words_file = str(sw_file)
         f = StopWordsFilter(mock_config, mock_logger)
 
         assert "политика" in f._stop_words
@@ -120,7 +120,7 @@ class TestFilterChain:
     def test_filters_old_posts(self, mock_config, mock_logger):
         """FilterChain отсеивает старые посты через DateFilter."""
         chain = FilterChain([
-            DateFilter(mock_config.search.days_back),
+            DateFilter(mock_config.days_back),
             EmptyTextFilter(),
             StopWordsFilter(mock_config, mock_logger),
         ])
@@ -136,7 +136,7 @@ class TestFilterChain:
     def test_filters_empty_text(self, mock_config, mock_logger):
         """FilterChain отсеивает пустые посты через EmptyTextFilter."""
         chain = FilterChain([
-            DateFilter(mock_config.search.days_back),
+            DateFilter(mock_config.days_back),
             EmptyTextFilter(),
             StopWordsFilter(mock_config, mock_logger),
         ])
@@ -153,7 +153,7 @@ class TestFilterChain:
     def test_filters_stop_words(self, mock_config, mock_logger):
         """FilterChain отсеивает стоп-слова через StopWordsFilter."""
         chain = FilterChain([
-            DateFilter(mock_config.search.days_back),
+            DateFilter(mock_config.days_back),
             EmptyTextFilter(),
             StopWordsFilter(mock_config, mock_logger),
         ])
@@ -171,7 +171,7 @@ class TestFilterChain:
     def test_all_pass(self, mock_config, mock_logger):
         """Все свежие посты с текстом и без стоп-слов проходят."""
         chain = FilterChain([
-            DateFilter(mock_config.search.days_back),
+            DateFilter(mock_config.days_back),
             EmptyTextFilter(),
             StopWordsFilter(mock_config, mock_logger),
         ])

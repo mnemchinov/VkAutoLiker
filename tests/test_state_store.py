@@ -4,7 +4,7 @@ from state_store import StateStore
 class TestStateStore:
     def test_mark_and_check_processed(self, mock_config, mock_logger, tmp_path):
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         assert not state.is_processed(1, 100)
@@ -15,7 +15,7 @@ class TestStateStore:
 
     def test_session_lifecycle(self, mock_config, mock_logger, tmp_path):
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         session_id = state.start_session()
@@ -31,7 +31,7 @@ class TestStateStore:
     def test_manual_session_not_counted_in_daily(self, mock_config, mock_logger, tmp_path):
         """Ручная сессия (is_auto=False) не учитывается в дневном лимите."""
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         # Авто-сессия — учитывается
@@ -73,7 +73,7 @@ class TestStateStore:
 
         # StateStore должен добавить колонку
         config = mock_config
-        config.state.db_path = db_path
+        config.db_path = db_path
         state = StateStore(config, mock_logger)
 
         # Старая сессия помечена is_auto=1 (DEFAULT 1)
@@ -83,7 +83,7 @@ class TestStateStore:
 
     def test_multiple_sessions_daily(self, mock_config, mock_logger, tmp_path):
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         for i in range(3):
@@ -97,7 +97,7 @@ class TestStateStore:
 
     def test_total_stats(self, mock_config, mock_logger, tmp_path):
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         sid = state.start_session()
@@ -110,7 +110,7 @@ class TestStateStore:
 
     def test_reset(self, mock_config, mock_logger, tmp_path):
         config = mock_config
-        config.state.db_path = str(tmp_path / "test.db")
+        config.db_path = str(tmp_path / "test.db")
         state = StateStore(config, mock_logger)
 
         state.mark_processed(1, 1)

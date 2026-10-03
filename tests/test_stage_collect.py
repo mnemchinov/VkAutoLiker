@@ -39,7 +39,7 @@ def collect_stage(mock_config, mock_logger):
 class TestCollectStage:
     def test_queries_enough_skips_other_sources(self, collect_stage, mock_config):
         """Если queries дают enough постов — groups/accounts/friends не вызываются."""
-        mock_config.search.queries = ["тест"]
+        mock_config.queries = ["тест"]
         posts = [_make_post(1, i) for i in range(20)]
         collect_stage._search.search = MagicMock(return_value=posts)
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
@@ -53,8 +53,8 @@ class TestCollectStage:
 
     def test_hashtags_fill_when_queries_empty(self, collect_stage, mock_config):
         """Если queries пусты — hashtags собираются, groups не вызываются."""
-        mock_config.search.queries = []
-        mock_config.search.hashtags = ["#тест"]
+        mock_config.queries = []
+        mock_config.hashtags = ["#тест"]
         collect_stage._search.search = MagicMock(return_value=[])
         hashtag_posts = [_make_post(2, i) for i in range(20)]
         collect_stage._search.search_hashtag = MagicMock(return_value=hashtag_posts)
@@ -67,12 +67,12 @@ class TestCollectStage:
 
     def test_early_exit_on_friends(self, collect_stage, mock_config):
         """Ранний выход: enough постов на друзьях → остальные друзья пропускаются."""
-        mock_config.search.auto_friends = True
-        mock_config.search.auto_groups = False
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = []
-        mock_config.search.accounts = []
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
 
         friend_ids = [100 + i for i in range(10)]
         collect_stage._search.get_friends = MagicMock(return_value=friend_ids)
@@ -109,12 +109,12 @@ class TestCollectStage:
 
     def test_resolve_screen_name_none_skips_group(self, collect_stage, mock_config):
         """Если resolve_screen_name возвращает None — группа пропускается."""
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = ["bad_group"]
-        mock_config.search.accounts = []
-        mock_config.search.auto_friends = False
-        mock_config.search.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["bad_group"]
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = False
 
         collect_stage._search.resolve_screen_name = MagicMock(return_value=None)
         collect_stage._search.get_wall_posts = MagicMock()
@@ -129,12 +129,12 @@ class TestCollectStage:
         """VKApiError на get_wall_posts — источник пропускается, сбор продолжается."""
         from vk_api_client import VKApiError
 
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = ["group1", "group2"]
-        mock_config.search.accounts = []
-        mock_config.search.auto_friends = False
-        mock_config.search.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["group1", "group2"]
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = False
 
         collect_stage._search.resolve_screen_name = MagicMock(side_effect=[-111, -222])
         collect_stage._search.get_wall_posts = MagicMock(
@@ -163,12 +163,12 @@ class TestCollectStage:
 
     def test_groups_fill_when_queries_hashtags_empty(self, collect_stage, mock_config):
         """Если queries и hashtags пусты — groups собираются."""
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = ["group1"]
-        mock_config.search.accounts = []
-        mock_config.search.auto_friends = False
-        mock_config.search.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["group1"]
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = False
 
         collect_stage._search.resolve_screen_name = MagicMock(return_value=-111)
         collect_stage._search.get_wall_posts = MagicMock(
@@ -182,7 +182,7 @@ class TestCollectStage:
 
     def test_target_likes_zero_skips_collection(self, collect_stage, mock_config):
         """target_likes=0 — сбор пропускается, возвращается пустой список."""
-        mock_config.search.queries = ["тест"]
+        mock_config.queries = ["тест"]
         collect_stage._search.search = MagicMock(return_value=[_make_post(1, 1)])
 
         ctx = PipelineContext(config=mock_config, target_likes=0)
@@ -193,13 +193,13 @@ class TestCollectStage:
 
     def test_friends_early_exit_before_safety_cap(self, collect_stage, mock_config):
         """Early-exit срабатывает до safety-капа — не все друзья опрашиваются."""
-        mock_config.search.auto_friends = True
-        mock_config.search.auto_groups = False
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = []
-        mock_config.search.accounts = []
-        mock_config.search.max_friends_to_collect = 100
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        mock_config.max_friends_to_collect = 100
 
         friend_ids = list(range(100, 200))  # 100 друзей
         collect_stage._search.get_friends = MagicMock(return_value=friend_ids)
@@ -218,13 +218,13 @@ class TestCollectStage:
 
     def test_friends_safety_cap_limits_api_calls(self, collect_stage, mock_config):
         """max_friends_to_collect — safety-кап на число API-вызовов, не срез списка."""
-        mock_config.search.auto_friends = True
-        mock_config.search.auto_groups = False
-        mock_config.search.queries = []
-        mock_config.search.hashtags = []
-        mock_config.search.groups = []
-        mock_config.search.accounts = []
-        mock_config.search.max_friends_to_collect = 3
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        mock_config.max_friends_to_collect = 3
 
         friend_ids = list(range(100, 200))  # 100 друзей
         collect_stage._search.get_friends = MagicMock(return_value=friend_ids)

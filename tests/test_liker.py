@@ -61,7 +61,7 @@ class TestRun:
         """Дневной лимит сессий достигнут — start_session не вызывается."""
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(
-            return_value=(mock_config.limits.sessions_per_day, 0)
+            return_value=(mock_config.sessions_per_day, 0)
         )
         liker._state.start_session = MagicMock()
 
@@ -74,7 +74,7 @@ class TestRun:
         """no_limit=True — дневной лимит не проверяется, сессия создаётся."""
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(
-            return_value=(mock_config.limits.sessions_per_day, 0)
+            return_value=(mock_config.sessions_per_day, 0)
         )
         liker._state.start_session = MagicMock(return_value=1)
         liker._state.end_session = MagicMock()
@@ -153,7 +153,7 @@ class TestRun:
         # skip-пауза random.uniform(2, 5) — должна быть
         assert (2, 5) in uniform_calls
         # обычная пауза random.uniform(min_delay_sec, max_delay_sec) — НЕ должна быть
-        assert (mock_config.limits.min_delay_sec, mock_config.limits.max_delay_sec) not in uniform_calls
+        assert (mock_config.min_delay_sec, mock_config.max_delay_sec) not in uniform_calls
         # burst-пауза random.uniform(60, 180) — НЕ должна быть
         assert (60, 180) not in uniform_calls
 
@@ -182,8 +182,8 @@ class TestRun:
 
     def test_likes_per_session_limit_stops_cycle(self, liker, mock_config):
         """Лимит лайков за сессию достигнут → цикл прерывается."""
-        mock_config.limits.likes_per_session_min = 2
-        mock_config.limits.likes_per_session_max = 2
+        mock_config.likes_per_session_min = 2
+        mock_config.likes_per_session_max = 2
         posts = [_make_post(1, i) for i in range(10)]
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
@@ -204,7 +204,7 @@ class TestRun:
 
     def test_captcha_streak_stops_session(self, liker, mock_config):
         """Серия капч (>= max_captcha_streak) прерывает сессию."""
-        mock_config.limits.max_captcha_streak = 3
+        mock_config.max_captcha_streak = 3
         posts = [_make_post(1, i) for i in range(10)]
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
@@ -226,7 +226,7 @@ class TestRun:
         """Авто-запуск (no_limit=False) — jitter перед стартом браузера."""
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(
-            return_value=(mock_config.limits.sessions_per_day, 0)
+            return_value=(mock_config.sessions_per_day, 0)
         )
         liker._state.start_session = MagicMock()
 
@@ -283,8 +283,8 @@ class TestRun:
 
     def test_burst_softening_long_pause(self, liker, mock_config):
         """Каждые 5-10 лайков — длинная пауза (60-180 сек)."""
-        mock_config.limits.likes_per_session_min = 10
-        mock_config.limits.likes_per_session_max = 10
+        mock_config.likes_per_session_min = 10
+        mock_config.likes_per_session_max = 10
         posts = [_make_post(1, i) for i in range(10)]
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
