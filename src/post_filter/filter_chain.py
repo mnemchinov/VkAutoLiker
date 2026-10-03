@@ -1,0 +1,28 @@
+"""Композит: прогоняет пост через список фильтров.
+
+Пост отсеивается, если хотя бы один фильтр вернул should_skip == True.
+Порядок фильтров важен для производительности: быстрые проверки (date,
+empty) идут раньше тяжёлых (stop_words, LLM).
+"""
+
+from post import Post
+
+from .protocol import PostFilterProtocol
+
+
+class FilterChain:
+    """Композит: прогоняет пост через список фильтров."""
+
+    def __init__(self, filters: list[PostFilterProtocol]):
+        """Инициализирует цепочку фильтров."""
+        self._filters = filters
+
+    def filter(self, posts: list[Post]) -> list[Post]:
+        """Возвращает посты, прошедшие все фильтры."""
+        return [p for p in posts if not any(f.should_skip(p) for f in self._filters)]
+
+    def log_summaries(self) -> None:
+        """Вызывает log_summary() у всех фильтров, у которых он есть."""
+        for f in self._filters:
+            if hasattr(f, "log_summary"):
+                f.log_summary()
