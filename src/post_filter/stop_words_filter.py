@@ -129,8 +129,8 @@ class StopWordsFilter(PostFilterProtocol):
         return False
 
     def log_summary(self) -> None:
-        """Логирует сводку: проверено N, отсеяно M (X%)."""
+        """Логирует сводку: достигло фильтра N, отсеяно M (X%)."""
         pct = round(self._skipped / self._checked * 100, 1) if self._checked else 0.0
         self._logger.info(
-            f"Стоп-слова: проверено {self._checked}, отсеяно {self._skipped} ({pct}%)"
+            f"Стоп-слова: достигло фильтра {self._checked}, отсеяно {self._skipped} ({pct}%)"
         )

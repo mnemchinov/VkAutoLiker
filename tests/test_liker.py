@@ -223,7 +223,7 @@ class TestRun:
         assert liker._likes_service.like.call_count == 3
 
     def test_jitter_in_auto_mode(self, liker, mock_config):
-        """Авто-запуск (no_limit=False) — jitter перед стартом браузера."""
+        """Авто-запуск (no_limit=False) — jitter после проверки авторизации."""
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(
             return_value=(mock_config.sessions_per_day, 0)

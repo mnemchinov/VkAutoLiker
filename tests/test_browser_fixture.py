@@ -10,7 +10,7 @@ class TestBrowserLikesFixture:
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.common.by import By
 
-        from browser_likes import BrowserLikesService
+        from browser import BrowserLikesService
 
         options = Options()
         options.add_argument("--headless=new")

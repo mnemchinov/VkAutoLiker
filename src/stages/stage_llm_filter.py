@@ -1,7 +1,7 @@
 """Pipeline-стадия LLMFilterStage.
 
-LLMTopicFilter (сам класс фильтра) живёт в post_filter.py вместе с остальными
-фильтрами (DateFilter, EmptyTextFilter, StopWordsFilter) — все реализуют
+LLMTopicFilter (сам класс фильтра) живёт в post_filter/llm_topic_filter.py вместе
+с остальными фильтрами (DateFilter, EmptyTextFilter, StopWordsFilter) — все реализуют
 PostFilterProtocol. Здесь — только stage-обёртка для конвейера.
 
 LLMFilterStage размещается ПОСЛЕ DedupStage, чтобы:

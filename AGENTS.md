@@ -211,6 +211,8 @@ pytest -m "not browser and not live"    # базовая страховка по
    пер-сесссионные (`likes_per_session_min`/`likes_per_session_max`) внутри цикла. `--no-limit` обходит дневной лимит:
    сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
    `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
+   **Jitter выполняется после проверки авторизации:** `is_logged_in()` — до `random.uniform(0, 1800)`,
+   чтобы истёкшая сессия не ждала до 30 минут зря.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
    в `stage_collect.py` проверяет `StateStore.is_processed()` после `FilterChain.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
@@ -224,7 +226,9 @@ pytest -m "not browser and not live"    # базовая страховка по
     `wall.get` (не срез списка): достигнут → `break`. Каждая сессия работает со случайным
     подмножеством, а не с одними и теми же первыми N.
     **Кэш закрытых стен:** перед `wall.get` проверяется `StateStore.is_wall_closed(owner_id)`;
-    при `VKApiError` стена помечается через `mark_wall_closed`. TTL — `closed_wall_ttl_days`
+    при `VKApiError` с кодами 15 (access denied), 18 (deleted/banned), 30 (profile private)
+    стена помечается через `mark_wall_closed`. `get_wall_posts()` re-raise'ит эти ошибки,
+    вызывающий код в `CollectStage` ловит и кэширует. TTL — `closed_wall_ttl_days`
     (дефолт 7, env `VK_CLOSED_WALL_TTL_DAYS`). Предотвращает ~38% пустых API-вызовов на закрытые стены друзей.
 11. **Источник лайков в приоритетном порядке:** queries → hashtags → groups → accounts →
     auto_friends → auto_groups. Каждый следующий источник собирается только если
