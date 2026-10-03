@@ -56,17 +56,12 @@ class CollectStage:
         def _accept(posts: list[Post]) -> None:
             """Фильтрует (PostFilter + is_processed), шафлит, добавляет в all_posts."""
             filtered = self._filter.filter(posts)
-            fresh = [
-                p for p in filtered
-                if not self._state.is_processed(p.owner_id, p.item_id)
-            ]
+            fresh = [p for p in filtered if not self._state.is_processed(p.owner_id, p.item_id)]
             random.shuffle(fresh)
             all_posts.extend(fresh)
 
         for query in self._config.queries:
-            posts = self._search.search(
-                query, max_posts=self._config.max_posts_per_query
-            )
+            posts = self._search.search(query, max_posts=self._config.max_posts_per_query)
             _accept(posts)
 
         if len(all_posts) >= enough:
@@ -126,7 +121,9 @@ class CollectStage:
             api_calls = 0
             for fid in friend_ids:
                 if len(all_posts) >= enough:
-                    self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей")
+                    self._logger.info(
+                        f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей"
+                    )
                     break
                 if api_calls >= self._config.max_friends_to_collect:
                     self._logger.info(f"Достигнут лимит API-вызовов к друзьям ({api_calls})")
@@ -154,7 +151,9 @@ class CollectStage:
             api_calls = 0
             for gid in group_ids:
                 if len(all_posts) >= enough:
-                    self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск остальных групп")
+                    self._logger.info(
+                        f"Достаточно постов ({len(all_posts)}), пропуск остальных групп"
+                    )
                     break
                 if api_calls >= self._config.max_groups_to_collect:
                     self._logger.info(f"Достигнут лимит API-вызовов к группам ({api_calls})")

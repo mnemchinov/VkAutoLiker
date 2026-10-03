@@ -22,11 +22,15 @@ class TestVKApiClient:
         client = VKApiClient(mock_config, mock_logger)
 
         error_response = MagicMock()
-        error_response.json.return_value = {"error": {"error_code": 6, "error_msg": "Too many requests"}}
+        error_response.json.return_value = {
+            "error": {"error_code": 6, "error_msg": "Too many requests"}
+        }
         success_response = MagicMock()
         success_response.json.return_value = {"response": {"ok": True}}
 
-        with patch("api.vk_api_client.requests.get", side_effect=[error_response, success_response]):
+        with patch(
+            "api.vk_api_client.requests.get", side_effect=[error_response, success_response]
+        ):
             with patch("api.vk_api_client.time.sleep"):
                 result = client.call("newsfeed.search", {"q": "test"})
 
@@ -37,7 +41,9 @@ class TestVKApiClient:
         client = VKApiClient(mock_config, mock_logger)
 
         error_response = MagicMock()
-        error_response.json.return_value = {"error": {"error_code": 6, "error_msg": "Too many requests"}}
+        error_response.json.return_value = {
+            "error": {"error_code": 6, "error_msg": "Too many requests"}
+        }
 
         with patch("api.vk_api_client.requests.get", return_value=error_response) as mock_get:
             with patch("api.vk_api_client.time.sleep"):
@@ -51,7 +57,9 @@ class TestVKApiClient:
         client = VKApiClient(mock_config, mock_logger)
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {"error": {"error_code": 14, "error_msg": "Captcha needed"}}
+        mock_response.json.return_value = {
+            "error": {"error_code": 14, "error_msg": "Captcha needed"}
+        }
 
         with patch("api.vk_api_client.requests.get", return_value=mock_response):
             with pytest.raises(CaptchaError):
@@ -61,7 +69,9 @@ class TestVKApiClient:
         client = VKApiClient(mock_config, mock_logger)
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {"error": {"error_code": 15, "error_msg": "Access denied"}}
+        mock_response.json.return_value = {
+            "error": {"error_code": 15, "error_msg": "Access denied"}
+        }
 
         with patch("api.vk_api_client.requests.get", return_value=mock_response):
             with pytest.raises(VKApiError) as exc_info:
@@ -76,10 +86,13 @@ class TestVKApiClient:
         success_response = MagicMock()
         success_response.json.return_value = {"response": {"ok": True}}
 
-        with patch("api.vk_api_client.requests.get", side_effect=[
-            requests.exceptions.ConnectionError("No connection"),
-            success_response,
-        ]):
+        with patch(
+            "api.vk_api_client.requests.get",
+            side_effect=[
+                requests.exceptions.ConnectionError("No connection"),
+                success_response,
+            ],
+        ):
             with patch("api.vk_api_client.time.sleep"):
                 result = client.call("newsfeed.search", {"q": "test"})
 
@@ -89,8 +102,10 @@ class TestVKApiClient:
         """Сетевая ошибка — исчерпаны все 3 попытки, выбрасывает VKApiError."""
         client = VKApiClient(mock_config, mock_logger)
 
-        with patch("api.vk_api_client.requests.get",
-                   side_effect=requests.exceptions.ConnectionError("No connection")):
+        with patch(
+            "api.vk_api_client.requests.get",
+            side_effect=requests.exceptions.ConnectionError("No connection"),
+        ):
             with patch("api.vk_api_client.time.sleep"):
                 with pytest.raises(VKApiError) as exc_info:
                     client.call("newsfeed.search", {"q": "test"})
@@ -105,7 +120,9 @@ class TestVKApiClient:
         success_response.json.return_value = {"response": {"ok": True}}
 
         bad_response = MagicMock()
-        bad_response.json.side_effect = requests.exceptions.JSONDecodeError("Expecting value", "", 0)
+        bad_response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "Expecting value", "", 0
+        )
 
         with patch("api.vk_api_client.requests.get", side_effect=[bad_response, success_response]):
             with patch("api.vk_api_client.time.sleep"):
@@ -118,7 +135,9 @@ class TestVKApiClient:
         client = VKApiClient(mock_config, mock_logger)
 
         bad_response = MagicMock()
-        bad_response.json.side_effect = requests.exceptions.JSONDecodeError("Expecting value", "", 0)
+        bad_response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "Expecting value", "", 0
+        )
 
         with patch("api.vk_api_client.requests.get", return_value=bad_response) as mock_get:
             with patch("api.vk_api_client.time.sleep"):

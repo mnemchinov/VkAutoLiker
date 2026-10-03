@@ -161,11 +161,13 @@ class TestStopWordsFilter:
 class TestFilterChain:
     def test_filters_old_posts(self, mock_config, mock_logger):
         """FilterChain отсеивает старые посты через DateFilter."""
-        chain = FilterChain([
-            DateFilter(mock_config.days_back),
-            EmptyTextFilter(),
-            StopWordsFilter(mock_config, mock_logger),
-        ])
+        chain = FilterChain(
+            [
+                DateFilter(mock_config.days_back),
+                EmptyTextFilter(),
+                StopWordsFilter(mock_config, mock_logger),
+            ]
+        )
 
         posts: list[Post] = [
             make_post(1, 1, "fresh", days_ago=1),
@@ -177,11 +179,13 @@ class TestFilterChain:
 
     def test_filters_empty_text(self, mock_config, mock_logger):
         """FilterChain отсеивает пустые посты через EmptyTextFilter."""
-        chain = FilterChain([
-            DateFilter(mock_config.days_back),
-            EmptyTextFilter(),
-            StopWordsFilter(mock_config, mock_logger),
-        ])
+        chain = FilterChain(
+            [
+                DateFilter(mock_config.days_back),
+                EmptyTextFilter(),
+                StopWordsFilter(mock_config, mock_logger),
+            ]
+        )
 
         posts: list[Post] = [
             make_post(1, 1, "real text"),
@@ -194,11 +198,13 @@ class TestFilterChain:
 
     def test_filters_stop_words(self, mock_config, mock_logger):
         """FilterChain отсеивает стоп-слова через StopWordsFilter."""
-        chain = FilterChain([
-            DateFilter(mock_config.days_back),
-            EmptyTextFilter(),
-            StopWordsFilter(mock_config, mock_logger),
-        ])
+        chain = FilterChain(
+            [
+                DateFilter(mock_config.days_back),
+                EmptyTextFilter(),
+                StopWordsFilter(mock_config, mock_logger),
+            ]
+        )
 
         posts: list[Post] = [
             make_post(1, 1, "обычный пост"),
@@ -212,11 +218,13 @@ class TestFilterChain:
 
     def test_all_pass(self, mock_config, mock_logger):
         """Все свежие посты с текстом и без стоп-слов проходят."""
-        chain = FilterChain([
-            DateFilter(mock_config.days_back),
-            EmptyTextFilter(),
-            StopWordsFilter(mock_config, mock_logger),
-        ])
+        chain = FilterChain(
+            [
+                DateFilter(mock_config.days_back),
+                EmptyTextFilter(),
+                StopWordsFilter(mock_config, mock_logger),
+            ]
+        )
 
         posts: list[Post] = [
             make_post(1, 1, "post one"),

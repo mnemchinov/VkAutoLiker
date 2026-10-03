@@ -12,7 +12,13 @@ from stages import Pipeline, PipelineContext
 
 def _make_post(owner_id: int = 1, item_id: int = 1) -> Post:
     """Создаёт тестовый Post."""
-    return Post(owner_id=owner_id, item_id=item_id, text="текст", date=0, url=build_post_url(owner_id, item_id))
+    return Post(
+        owner_id=owner_id,
+        item_id=item_id,
+        text="текст",
+        date=0,
+        url=build_post_url(owner_id, item_id),
+    )
 
 
 class TestPipeline:

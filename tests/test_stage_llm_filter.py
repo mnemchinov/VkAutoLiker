@@ -162,7 +162,11 @@ class TestLLMFilterStage:
         ]
         ctx = PipelineContext(config=mock_config, posts=posts)
 
-        responses = [_mock_llm_response("SKIP"), _mock_llm_response("OK"), _mock_llm_response("SKIP")]
+        responses = [
+            _mock_llm_response("SKIP"),
+            _mock_llm_response("OK"),
+            _mock_llm_response("SKIP"),
+        ]
         with patch("litellm.completion", side_effect=responses):
             result = stage.process(ctx)
 

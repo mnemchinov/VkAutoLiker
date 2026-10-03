@@ -66,6 +66,7 @@ def mock_config_data():
 @pytest.fixture
 def mock_config(mock_config_data, monkeypatch):
     from settings import Settings
+
     monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
     monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
     return Settings(_env_file=None, **mock_config_data)
@@ -74,6 +75,7 @@ def mock_config(mock_config_data, monkeypatch):
 @pytest.fixture
 def mock_logger(mock_config):
     from logger import AppLogger
+
     return AppLogger(mock_config)
 
 

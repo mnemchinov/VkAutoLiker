@@ -119,8 +119,9 @@ class Settings(BaseSettings):
     # Профиль Chrome
     profile_max_size_mb: int = 500
 
-    @field_validator("queries", "hashtags", "groups", "accounts", "stop_words",
-                     "llm_stop_topics", mode="before")
+    @field_validator(
+        "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"
+    )
     @classmethod
     def _parse_list_fields(cls, v):
         """Парсит comma-separated строки из env vars в списки."""

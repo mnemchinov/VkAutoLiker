@@ -7,6 +7,7 @@ from settings import Settings
 
 class AppLogger:
     """Обёртка над logging.Logger с консольным и файловым хендлерами."""
+
     def __init__(self, config: Settings, name: str = "vk_autoliker"):
         """Инициализирует логгер с консольным и файловым хендлерами."""
         self._logger = logging.getLogger(name)

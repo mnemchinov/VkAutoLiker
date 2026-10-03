@@ -79,7 +79,9 @@ class VKApiClient:
                     )
                     time.sleep(self._NETWORK_RETRY_DELAY)
                     continue
-                raise VKApiError(0, f"Сетевая ошибка после {self._MAX_NETWORK_RETRIES} попыток: {e}")
+                raise VKApiError(
+                    0, f"Сетевая ошибка после {self._MAX_NETWORK_RETRIES} попыток: {e}"
+                )
 
             try:
                 data = response.json()
@@ -107,7 +109,10 @@ class VKApiClient:
                         )
                         time.sleep(1)
                         continue
-                    raise VKApiError(code, f"Превышен лимит запросов после {self._MAX_ERROR6_RETRIES} попыток: {msg}")
+                    raise VKApiError(
+                        code,
+                        f"Превышен лимит запросов после {self._MAX_ERROR6_RETRIES} попыток: {msg}",
+                    )
                 elif code == 14:
                     raise CaptchaError(f"Требуется капча: {msg}")
                 else:

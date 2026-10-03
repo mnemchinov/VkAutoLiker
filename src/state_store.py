@@ -125,9 +125,7 @@ class StateStore:
 
     def get_total_stats(self) -> tuple[int, int]:
         """Возвращает (всего сессий, всего лайков) — все сессии, включая ручные."""
-        cursor = self._conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions"
-        )
+        cursor = self._conn.execute("SELECT COUNT(*), COALESCE(SUM(likes_count), 0) FROM sessions")
         row = cursor.fetchone()
         return (row[0], row[1])
 

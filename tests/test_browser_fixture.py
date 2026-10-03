@@ -5,7 +5,9 @@ import pytest
 
 @pytest.mark.browser
 class TestBrowserLikesFixture:
-    def test_find_like_button_in_post_container(self, http_fixture_server, mock_config, mock_logger):
+    def test_find_like_button_in_post_container(
+        self, http_fixture_server, mock_config, mock_logger
+    ):
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.common.by import By
@@ -26,6 +28,7 @@ class TestBrowserLikesFixture:
 
             def find_elements(selector):
                 return driver.find_elements(By.CSS_SELECTOR, selector)
+
             browser.find_elements = find_elements
 
             def click_element(el):
@@ -34,12 +37,14 @@ class TestBrowserLikesFixture:
                     return True
                 except Exception:
                     return False
+
             browser.click_element = click_element
 
             svc = BrowserLikesService(browser, mock_config, mock_logger)
 
             driver.get(f"{http_fixture_server}/vk_post.html")
             import time
+
             time.sleep(0.5)
 
             element = svc._find_like_button(-123, 456)

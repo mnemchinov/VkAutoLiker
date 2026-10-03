@@ -178,9 +178,7 @@ class AutoLiker:
                         likes_since_break += 1
                         captcha_streak = 0
                         self._state.mark_processed(post.owner_id, post.item_id)
-                        self._logger.info(
-                            f"Лайкнут ({likes_count}/{target})"
-                        )
+                        self._logger.info(f"Лайкнут ({likes_count}/{target})")
                     elif result == LikeResult.ALREADY_LIKED:
                         already_liked_count += 1
                         captcha_streak = 0
@@ -209,14 +207,14 @@ class AutoLiker:
                 # Burst-смягчение: каждые 5-10 лайков — длинная пауза «отвлечения»
                 if likes_since_break >= next_break_at:
                     long_pause = random.uniform(60, 180)
-                    self._logger.info(f"Длинная пауза для имитации отвлечения: {long_pause:.0f} сек")
+                    self._logger.info(
+                        f"Длинная пауза для имитации отвлечения: {long_pause:.0f} сек"
+                    )
                     time.sleep(long_pause)
                     likes_since_break = 0
                     next_break_at = random.randint(5, 10)
                 else:
-                    delay = random.uniform(
-                        self._config.min_delay_sec, self._config.max_delay_sec
-                    )
+                    delay = random.uniform(self._config.min_delay_sec, self._config.max_delay_sec)
                     self._logger.info(f"Пауза {delay:.1f} сек перед следующим постом...")
                     time.sleep(delay)
 

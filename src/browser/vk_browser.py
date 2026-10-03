@@ -62,7 +62,9 @@ class VKBrowser:
             try:
                 result = subprocess.run(
                     [chrome_path, "--version"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 version_str = result.stdout.strip().split()[-1]
                 return int(version_str.split(".")[0])
@@ -114,7 +116,9 @@ class VKBrowser:
         try:
             result = subprocess.run(
                 ["pgrep", "-f", self._profile_path],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             pids = [int(p) for p in result.stdout.split() if p.strip()]
             for pid in pids:
@@ -188,7 +192,9 @@ class VKBrowser:
         """
         self.start(headless=False)
         self.navigate("https://vk.ru")
-        self._logger.info("Открыта страница входа. Войдите вручную (включая 2FA), затем нажмите Enter.")
+        self._logger.info(
+            "Открыта страница входа. Войдите вручную (включая 2FA), затем нажмите Enter."
+        )
         input()
         self._logger.info("Вход подтверждён пользователем")
 
@@ -306,7 +312,9 @@ class VKBrowser:
                     )
                     time.sleep(random.uniform(55, 65))
                 else:
-                    self._logger.error(f"Не удалось проверить авторизацию после {max_retries} попыток: {e}")
+                    self._logger.error(
+                        f"Не удалось проверить авторизацию после {max_retries} попыток: {e}"
+                    )
                     return False
         return False
 

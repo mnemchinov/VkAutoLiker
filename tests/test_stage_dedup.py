@@ -8,13 +8,25 @@ from stages import DedupStage, PipelineContext
 
 def _make_post(owner_id: int, item_id: int) -> Post:
     """Создаёт тестовый Post."""
-    return Post(owner_id=owner_id, item_id=item_id, text="текст", date=0, url=build_post_url(owner_id, item_id))
+    return Post(
+        owner_id=owner_id,
+        item_id=item_id,
+        text="текст",
+        date=0,
+        url=build_post_url(owner_id, item_id),
+    )
 
 
 class TestDedupStage:
     def test_removes_duplicates(self):
         """Дубликаты по (owner_id, item_id) схлопываются."""
-        posts = [_make_post(1, 1), _make_post(1, 2), _make_post(1, 1), _make_post(1, 3), _make_post(1, 2)]
+        posts = [
+            _make_post(1, 1),
+            _make_post(1, 2),
+            _make_post(1, 1),
+            _make_post(1, 3),
+            _make_post(1, 2),
+        ]
         ctx = PipelineContext(config=MagicMock(), posts=posts)
 
         result = DedupStage().process(ctx)

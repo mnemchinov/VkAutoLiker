@@ -1,6 +1,5 @@
 """Сервис поиска постов через VK API (newsfeed.search, wall.get, friends.get, groups.get)."""
 
-
 from logger import AppLogger
 from post import Post, build_post_url
 
@@ -46,12 +45,15 @@ class ApiSearchService:
         while len(posts) < max_posts:
             batch = min(count, max_posts - len(posts))
             try:
-                resp = self._client.call("wall.get", {
-                    "owner_id": owner_id,
-                    "count": batch,
-                    "offset": offset,
-                    "filter": "owner",
-                })
+                resp = self._client.call(
+                    "wall.get",
+                    {
+                        "owner_id": owner_id,
+                        "count": batch,
+                        "offset": offset,
+                        "filter": "owner",
+                    },
+                )
             except VKApiError as e:
                 if e.code in (15, 18, 30):
                     raise
@@ -80,10 +82,13 @@ class ApiSearchService:
         Перемешивание и ограничение числа API-вызовов — на стороне CollectStage.
         """
         self._logger.info(f"API friends.get: user_id={user_id}")
-        resp = self._client.call("friends.get", {
-            "user_id": user_id,
-            "count": 1000,
-        })
+        resp = self._client.call(
+            "friends.get",
+            {
+                "user_id": user_id,
+                "count": 1000,
+            },
+        )
         items = resp.get("items", [])
         friend_ids = [f for f in items if isinstance(f, int)]
         self._logger.info(f"Найдено {len(friend_ids)} друзей")
@@ -97,11 +102,14 @@ class ApiSearchService:
         Перемешивание и ограничение числа API-вызовов — на стороне CollectStage.
         """
         self._logger.info(f"API groups.get: user_id={user_id}")
-        resp = self._client.call("groups.get", {
-            "user_id": user_id,
-            "count": 1000,
-            "extended": 0,
-        })
+        resp = self._client.call(
+            "groups.get",
+            {
+                "user_id": user_id,
+                "count": 1000,
+                "extended": 0,
+            },
+        )
         items = resp.get("items", [])
         group_ids = [-gid for gid in items if isinstance(gid, int)]
         self._logger.info(f"Найдено {len(group_ids)} групп")
@@ -113,9 +121,12 @@ class ApiSearchService:
         Возвращает положительный ID для пользователя, отрицательный для группы.
         None, если имя не найдено.
         """
-        resp = self._client.call("utils.resolveScreenName", {
-            "screen_name": screen_name,
-        })
+        resp = self._client.call(
+            "utils.resolveScreenName",
+            {
+                "screen_name": screen_name,
+            },
+        )
         obj_type = resp.get("type")
         obj_id = resp.get("object_id")
         if not obj_id:

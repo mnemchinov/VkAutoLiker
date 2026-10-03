@@ -81,14 +81,14 @@ class TestBrowserLikesMock:
             )
             return el
 
-        browser.find_elements = MagicMock(
-            side_effect=_no_captcha_find_elements(None)
-        )
+        browser.find_elements = MagicMock(side_effect=_no_captcha_find_elements(None))
+
         # Переопределяем: для лайк-селектора возвращаем элемент, для капчи — []
         def smart_find(selector):
             if "captcha" in selector:
                 return []
             return [make_element()]
+
         browser.find_elements = MagicMock(side_effect=smart_find)
 
         svc = BrowserLikesService(browser, mock_config, mock_logger)
@@ -108,6 +108,7 @@ class TestBrowserLikesMock:
             if "captcha" in selector:
                 return []
             return [el]
+
         browser.find_elements = MagicMock(side_effect=smart_find)
 
         svc = BrowserLikesService(browser, mock_config, mock_logger)
@@ -128,6 +129,7 @@ class TestBrowserLikesMock:
             if "captcha" in selector:
                 return []
             return [el]
+
         browser.find_elements = MagicMock(side_effect=smart_find)
 
         svc = BrowserLikesService(browser, mock_config, mock_logger)
@@ -156,6 +158,7 @@ class TestBrowserLikesMock:
             if "captcha" in selector:
                 return [captcha_el]
             return []
+
         browser.find_elements = MagicMock(side_effect=smart_find)
 
         svc = BrowserLikesService(browser, mock_config, mock_logger)
