@@ -1,4 +1,12 @@
-from config import ApiConfig, AppConfig, BrowserConfig, ConfigLoader, LimitsConfig, SearchConfig
+from config import (
+    ApiConfig,
+    AppConfig,
+    BrowserConfig,
+    ConfigLoader,
+    LimitsConfig,
+    LLMConfig,
+    SearchConfig,
+)
 
 
 class TestConfigLoader:
@@ -63,3 +71,48 @@ class TestConfigLoader:
         config1 = loader.load()
         config2 = loader.config
         assert config1 is config2
+
+    def test_llm_config(self, mock_config_file):
+        loader = ConfigLoader(mock_config_file)
+        config = loader.load()
+
+        assert isinstance(config.llm, LLMConfig)
+        assert config.llm.model == "openai/gpt-4o-mini"
+        assert config.llm.api_key == "test-llm-key"
+        assert config.llm.timeout == 10
+        assert config.llm.max_text_length == 500
+
+    def test_filter_mode_default(self, mock_config_file):
+        loader = ConfigLoader(mock_config_file)
+        config = loader.load()
+
+        assert config.search.filter_mode == "stop_words"
+
+    def test_filter_mode_invalid_raises(self, mock_config_file, mock_config_data):
+        mock_config_data["search"]["filter_mode"] = "invalid"
+        import yaml
+
+        with open(mock_config_file, "w", encoding="utf-8") as f:
+            yaml.dump(mock_config_data, f, allow_unicode=True)
+
+        loader = ConfigLoader(mock_config_file)
+        try:
+            loader.load()
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "filter_mode" in str(e)
+
+    def test_filter_mode_llm_without_model_raises(self, mock_config_file, mock_config_data):
+        mock_config_data["search"]["filter_mode"] = "llm"
+        mock_config_data["llm"]["model"] = ""
+        import yaml
+
+        with open(mock_config_file, "w", encoding="utf-8") as f:
+            yaml.dump(mock_config_data, f, allow_unicode=True)
+
+        loader = ConfigLoader(mock_config_file)
+        try:
+            loader.load()
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "llm.model" in str(e)

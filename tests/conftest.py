@@ -43,6 +43,7 @@ def mock_config_data():
             "days_back": 7,
             "stop_words": ["политика"],
             "stop_words_file": "",
+            "filter_mode": "stop_words",
         },
         "limits": {
             "likes_per_session_min": 3,
@@ -60,6 +61,14 @@ def mock_config_data():
         },
         "state": {
             "db_path": "test_state.db",
+        },
+        "llm": {
+            "model": "openai/gpt-4o-mini",
+            "api_base": "",
+            "api_key": "test-llm-key",
+            "system_prompt": "",
+            "timeout": 10,
+            "max_text_length": 500,
         },
     }
 
