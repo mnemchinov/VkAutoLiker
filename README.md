@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-110%20passed-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-124%20passed-brightgreen?logo=pytest)
 ![Coverage](https://img.shields.io/badge/coverage-75%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
@@ -240,7 +240,7 @@ VK_LLM_SSL_VERIFY=false
 ## Фильтрация
 
 - **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
-- **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file` (файл), отбрасываются. Списки объединяются. Регистронезависимо. Подстрока (без стемминга — «политика» не поймает «политику»).
+- **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file` (файл), отбрасываются. Списки объединяются. Регистронезависимо. Русские слова проходят лемматизацию через `pymorphy3`: стоп-слово «церковь» находит «церковью», «церкви», «церковного». Нерусские слова и аббревиатуры — substring-поиск.
 - **Дедупликация:** `is_processed(owner_id, item_id)` в SQLite — пост помечается
   обработанным при успехе, ошибке или исключении
 - **Пустой текст:** посты без текста пропускаются
@@ -355,7 +355,7 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 116 passed, 3 deselected (live-тесты пропускаются)
+pytest                                  # 124 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)

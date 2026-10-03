@@ -251,6 +251,12 @@ pytest -m "not browser and not live"    # базовая страховка по
     `FilterChain` (композит, `filter(posts) -> list[Post]`; LLMTopicFilter в цепочку не входит —
     вызывается только через `LLMFilterStage`). `CollectStage._accept()` вызывает
     `FilterChain.filter()` inline — ранний выход сохранён.
+    **StopWordsFilter** использует `pymorphy3` для лемматизации русских слов: стоп-слово «церковь»
+    находит «церковью», «церкви», «церковного». Три группы: `_stop_lemmas` (русские слова через
+    лемматизацию), `_stop_substrings` (нерусские/аббревиатуры через substring), `_stop_phrases`
+    (многословные фразы через substring). `MorphAnalyzer` — class-level singleton (словарь ~5MB грузится один раз).
+    Каждый результат `should_skip()` логируется на INFO (совпадение с указанием слова/леммы или OK) — по аналогии
+    с LLM-фильтром.
 20. **LLM-фильтрация опциональна.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию)
     или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
     каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
