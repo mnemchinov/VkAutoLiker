@@ -1,6 +1,6 @@
 ---
 name: vk-autoliker-conventions
-description: Перед любой правкой в src/ или созданием нового сервиса; при работе с VK API, Selenium, SQLite, config.yaml.
+description: Перед любой правкой в src/ или созданием нового сервиса; при работе с VK API, Selenium, SQLite, settings.py.
 ---
 
 # Конвенции VkAutoLiker
@@ -9,7 +9,7 @@ description: Перед любой правкой в src/ или создани�
 
 - Любая правка в `src/` (код, импорты, селекторы, логика)
 - Создание нового сервиса или модуля
-- Правка `config.yaml` или `config.py`
+- Правка `settings.py`
 - Работа с VK API, Selenium, SQLite, браузерными селекторами
 
 ## 12 критичных инвариантов (не ломать)
@@ -128,10 +128,10 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 ## Конфигурация и секреты
 
-- **`config.yaml` содержит реальный service-токен VK.** Не выводить его в логи, ответы,
-  комментарии, тесты и документацию. В тестах — заглушка `"test_token"`.
-- `chrome_profile/`, `*.db`, `*.log`, `.autoliker.lock` в `.gitignore`.
-- Любые изменения в `config.yaml` (особенно лимиты и источники) — только с явного
+- **Секреты загружаются из env vars** (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`), не из файлов в git.
+  Не выводить их в логи, ответы, комментарии, тесты и документацию. В тестах — заглушка `"test_token"`.
+- `chrome_profile/`, `*.db`, `*.log`, `.env`, `.autoliker.lock` в `.gitignore`.
+- Любые изменения в `Settings` (особенно лимиты и источники) — только с явного
   согласия пользователя: они напрямую влияют на риск блокировки аккаунта.
 
 ## Чеклист перед правкой

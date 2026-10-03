@@ -92,7 +92,7 @@ Tests MUST NOT hit real network or real browser unless explicitly marked.
 
 ## Article V: Configuration & Secrets (MUST)
 
-- `config.yaml` MUST NOT be logged, echoed, or committed with real tokens.
+- Secrets MUST be loaded from env vars (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`), not from files in git.
 - Test code MUST use placeholder values (`"test_token"`).
 
 **Rationale**: Token leak compromises the account.

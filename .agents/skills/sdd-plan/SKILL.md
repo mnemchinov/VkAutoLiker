@@ -73,7 +73,7 @@ $ARGUMENTS
 | II. API Boundary | ✅ | New calls via VKApiClient.call() |
 | III. Data Integrity | ✅ | Dedup preserved |
 | IV. Testing | ✅ | Mocks, no real network |
-| V. Config & Secrets | ✅ | New fields in AppConfig |
+| V. Config & Secrets | ✅ | New fields in Settings |
 
 ## Project Structure
 
@@ -82,8 +82,7 @@ $ARGUMENTS
 - `tests/test_<new_service>.py` — <what it tests>
 
 ### Modified files
-- `src/config.py` — new fields in AppConfig
-- `config.yaml` — new keys
+- `src/settings.py` — new fields in Settings
 - `src/liker.py` — wire new service into AutoLiker
 
 ## Phases

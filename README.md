@@ -55,30 +55,20 @@ pip install -r requirements.txt
 2. Скопировать service-ключ в разделе «Ключи доступа»
 3. Лимит без верификации приложения: 10 000 вызовов/мес
 
-### 3. Заполнить `config.yaml` и `.env`
+### 3. Заполнить `.env`
 
-Минимум для работы:
-
-```yaml
-api:
-  service_token: ""                 # оставить пустым — токен задаётся через env var
-
-search:
-  user_id: 12345678                # ваш VK ID (числовой)
-  hashtags:                        # хотя бы один источник
-    - "#вашХештег"
-  auto_friends: true               # собирать посты со стен друзей
-  auto_groups: true                # собирать посты со стен подписок
-```
-
-Секреты задаются через переменные окружения в файле `.env` (в корне проекта, в `.gitignore`):
+Минимум для работы — файл `.env` в корне проекта (в `.gitignore`):
 
 ```
 VK_SERVICE_TOKEN=ваш_service_токен
-VK_LLM_API_KEY=ваш_llm_ключ
+VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: llm
+VK_USER_ID=12345678                     # ваш VK ID (числовой)
+VK_HASHTAGS=#вашХештег                  # comma-separated, хотя бы один источник
+VK_AUTO_FRIENDS=true                    # собирать посты со стен друзей
+VK_AUTO_GROUPS=true                     # собирать посты со стен подписок
 ```
 
-Остальные параметры — см. [Параметры config.yaml](#параметры-configyaml).
+Остальные параметры — см. [Параметры Settings](#параметры-settings).
 
 ### 4. Первичный вход в VK
 
@@ -89,7 +79,7 @@ python src/main.py login
 Откроется Chrome с видимым окном. Войти вручную, пройти 2FA.
 Сессия сохранится в `chrome_profile/` — повторный вход не требуется.
 
-Команда `login` форсирует `headless=False` независимо от `config.yaml` — для 2FA
+Команда `login` форсирует `headless=False` независимо от `Settings` — для 2FA
 нужен видимый экран.
 
 ### 5. Проверка (один пост)
@@ -123,24 +113,26 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 
 Если команда не указана — по умолчанию выполняется `run`.
 
-## Параметры config.yaml
+## Параметры Settings
 
-### `api` — доступ к VK API
+Все параметры — поля класса `Settings` в `src/settings.py`. Значения задаются через env vars (префикс `VK_`) или файл `.env`; не указанные — используют дефолты класса.
 
-| Параметр | По умолч. | Описание |
-|---|---|---|
-| `service_token` | — | Service-токен (через env var `VK_SERVICE_TOKEN`) |
-| `api_version` | `5.131` | Версия VK API |
-| `base_url` | `https://api.vk.ru/method` | Базовый URL для вызовов |
+### VK API
 
-### `browser` — Selenium Chrome
+| Параметр | Env var | По умолч. | Описание |
+|---|---|---|---|
+| `service_token` | `VK_SERVICE_TOKEN` | — | Service-токен (`SecretStr`) |
+| `api_version` | `VK_API_VERSION` | `5.131` | Версия VK API |
+| `base_url` | `VK_BASE_URL` | `https://api.vk.ru/method` | Базовый URL для вызовов |
 
-| Параметр | По умолч. | Описание |
-|---|---|---|
-| `profile_path` | `./chrome_profile` | Каталог профиля Chrome (сохраняет сессию VK) |
-| `headless` | `true` | Скрытый режим. `login` форсирует `false` |
+### Selenium Chrome
 
-### `search` — источники и глубина сбора
+| Параметр | Env var | По умолч. | Описание |
+|---|---|---|---|
+| `profile_path` | `VK_PROFILE_PATH` | `./chrome_profile` | Каталог профиля Chrome |
+| `headless` | `VK_HEADLESS` | `true` | Скрытый режим. `login` форсирует `false` |
+
+### Источники и глубина сбора
 
 | Параметр | По умолч. | Пример | Описание |
 |---|---|---|---|
@@ -307,12 +299,12 @@ schtasks /delete /tn "VkAutoLiker_10" /f  # удалить задачу
 ## Структура проекта
 
 ```
-config.yaml            — единственная точка настройки
+.env                   — env vars: секреты + не-дефолтные параметры (VK_SERVICE_TOKEN, VK_LLM_API_KEY, ...); в .gitignore
 requirements.txt       — зависимости
 src/                   — весь код (плоская структура, без __init__.py)
   main.py              — CLI: login | run | test | status | reset + fcntl file lock
   liker.py             — AutoLiker: оркестратор цикла
-  config.py            — AppConfig + load_config (pydantic-модели)
+settings.py             — Settings(BaseSettings): env vars + .env + дефолты (pydantic-settings)
   vk_api_client.py     — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
   post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter

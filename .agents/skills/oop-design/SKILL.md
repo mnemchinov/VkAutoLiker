@@ -37,8 +37,8 @@ description: Перед проектированием нового класса
    обработки ошибок. Соседние файлы — образцы, не абстрактные правила.
 2. **Проверить `AutoLiker.__init__`** — как сервисы подключаются (DI через конструктор).
    Новый сервис подключается так же: `self._my_service = MyService(config, logger)`.
-3. **Проверить `config.py`** — какие pydantic-модели существуют. Новые параметры
-   добавляются в `AppConfig` (или вложенный `SearchConfig`) + `config.yaml` с комментарием.
+3. **Проверить `settings.py`** — какие поля есть в `Settings`. Новые параметры
+   добавляются в `Settings` (поле с дефолтом).
 4. **Проверить `AGENTS.md`** — критичные инварианты (секция 3). Не ломать ни один.
 
 ## Правила дизайна
@@ -52,7 +52,7 @@ description: Перед проектированием нового класса
 
 ```python
 class MyService:
-    def __init__(self, config: AppConfig, logger: AppLogger) -> None:
+    def __init__(self, config: Settings, logger: AppLogger) -> None:
         self._config = config
         self._logger = logger
 ```
@@ -90,7 +90,7 @@ class MyService:
 
 - [ ] Файл в `src/`, имя = `snake_case` класса
 - [ ] Подключение в `AutoLiker.__init__` через DI
-- [ ] Параметры в `AppConfig` + `config.yaml` с комментарием
+- [ ] Параметры в `Settings` (`settings.py`) с дефолтом
 - [ ] Docstrings на русском для модуля и публичных методов
 - [ ] Импорт проверен: `sys.path.insert(0,'src')` — плоские импорты
 - [ ] `pytest -m "not browser and not live"` проходит

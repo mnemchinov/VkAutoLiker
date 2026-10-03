@@ -18,7 +18,7 @@ description: Перед написанием или правкой тестов.
 
 | Класс | Файл | Что тестирует |
 |---|---|---|
-| `TestConfigLoader` | `test_config.py` | Чтение YAML, дефолты, валидация |
+| `TestSettings` | `test_settings.py` | Env vars, дефолты, валидация, SecretStr |
 | `TestVKApiClient` | `test_api_client.py` | Rate-limit, ретраи, error 6/14, сетевые ошибки |
 | `TestApiSearchService` | `test_api_search.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
 | `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain` | `test_post_filter.py` | days_back, пустой текст, стоп-слова, композит |
@@ -72,7 +72,7 @@ def test_browser_method(mock_sleep):
 |---|---|
 | `mock_config_data` | Словарь с конфигурацией (Python dict) |
 | `mock_config_file` | Временный YAML-файл с конфигурацией |
-| `mock_config` | `AppConfig` dataclass, готовый к использованию |
+| `mock_config` | `Settings` instance, готовый к использованию |
 | `mock_logger` | `MagicMock` логгера |
 | `mock_driver` | `MagicMock` Selenium WebDriver |
 | `tmp_db_path` | Путь к временной SQLite-БД (через `tmp_path`) |

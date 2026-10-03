@@ -30,7 +30,7 @@
   `PyYAML>=6.0`, `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`,
   `litellm`, `ruff>=0.6.0`, `pydantic-settings>=2.2.0`, `python-dotenv>=1.0.0`
 - **Хранилище состояния:** SQLite (стандартная библиотека `sqlite3`), файл `vk_autoliker.db`
-- **Конфигурация:** YAML-файл `config.yaml` + env vars (секреты); модели — pydantic-settings
+- **Конфигурация:** плоский `Settings(BaseSettings)` (pydantic-settings): env vars + `.env` + дефолты класса; без YAML
 - **Логирование:** стандартный `logging`, консоль + файл `vk_autoliker.log`
 - **Браузер:** Chrome через `undetected-chromedriver` (UC патчит антидетект:
   UA, navigator.webdriver, plugins, window.chrome, WebGL; `version_main` — авто-детект)
@@ -39,8 +39,7 @@
 ### Структура
 
 ```
-config.yaml            — настройка (источники, лимиты); секреты — через env vars
-.env                   — локальные env vars (VK_SERVICE_TOKEN, VK_LLM_API_KEY); в .gitignore
+.env                   — env vars: секреты + не-дефолтные параметры (VK_SERVICE_TOKEN, VK_LLM_API_KEY, ...); в .gitignore
 pytest.ini             — регистрация маркеров browser / live
 requirements.txt       — зависимости
 README.md              — документация проекта
@@ -48,7 +47,7 @@ README.md              — документация проекта
 src/                   — весь код, плоская структура БЕЗ __init__.py
   main.py              — CLI-точка входа (login|run|test|status|reset)
   liker.py             — AutoLiker: оркестратор всего цикла
-  config.py            — pydantic-модели AppConfig + load_config
+  settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
   vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
@@ -70,7 +69,7 @@ chrome_profile/        — профиль Chrome (в .gitignore), хранит �
 ```
 
 **Важно про импорты:** в `src/` нет `__init__.py`. Импорты плоские
-(`from config import ...`, а не `from src.config import ...`). Путь в `sys.path`
+(`from settings import ...`, а не `from src.settings import ...`). Путь в `sys.path`
 добавляют вручную `src/main.py` и `tests/conftest.py`. Поэтому **все команды
 запускаются с корня проекта**, а модули импортируются по имени файла.
 
@@ -91,7 +90,7 @@ pip install -r requirements.txt
 
 ### Команды запуска
 
-Все команды — `python src/main.py [--config config.yaml] <команда>`.
+Все команды — `python src/main.py <команда>`.
 Если команда не указана, по умолчанию выполняется `run`.
 
 ```bash
@@ -104,7 +103,7 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ```
 
 **Порядок обязательный:** сначала `login` (команда форсирует `headless=False` независимо
-от `config.yaml` — нужен видимый экран для 2FA), далее сессия сохраняется в
+от `Settings.headless` — нужен видимый экран для 2FA), далее сессия сохраняется в
 `chrome_profile/` и повторный вход не требуется.
 При истёкшей сессии `run`/`test` выведут `Нет авторизации. Сначала выполните команду 'login'.`
 
@@ -118,11 +117,11 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 110 passed, 3 deselected (live пропускаются)
+pytest                                  # 117 passed, 2 skipped (live пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
-pytest tests/test_config.py -v          # конкретный файл
+pytest tests/test_settings.py -v        # конкретный файл
 pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 ```
 
@@ -133,7 +132,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — ~106 тестов, маркер не нужен.
+- Юнит-тесты на моках — ~115 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -141,7 +140,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, stage_llm_filter, config"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, stage_llm_filter, settings"
 ```
 
 ---
@@ -156,8 +155,7 @@ pytest -m "not browser and not live"    # базовая страховка по
   русском языке, объясняющий *зачем*, а не *что*. Комментарии в теле кода — редкие, только
   про неочевидные причины (пример: «После клика aria-label меняется — ищем селектор заново»).
 - **Конфигурация — только pydantic-модели.** Новые настройки добавляются в
-  `config.py` (поле pydantic-модели с дефолтом) **и** в `config.yaml`
-  с комментарием-пояснением. Магических чисел в бизнес-логике нет — всё из `AppConfig`.
+  `settings.py` (поле `Settings` с дефолтом). Магических чисел в бизнес-логике нет — всё из `Settings`.
 - **DI через конструктор.** `AutoLiker.__init__` сам создаёт все сервисы из
   `(config, logger)`; тесты подменяют зависимости через `MagicMock`.
 - **Инкапсуляция:** приватные атрибуты и методы с подчёркиванием (`self._client`,
@@ -241,33 +239,33 @@ pytest -m "not browser and not live"    # базовая страховка по
     отдельный `is_liked()` не нужен, двойная навигация устранена.
 17. **Chrome version auto-detect.** `vk_browser.py` определяет версию Chrome через
     `subprocess` и передаёт `version_main` в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
-18. **Config validation.** `@model_validator` в `AppConfig` проверяет `min <= max` для всех
+18. **Config validation.** `@model_validator` в `Settings` проверяет `min <= max` для всех
     пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`,
-    `filter_mode` и `llm.model` при `filter_mode=="llm"`.
-21. **Секреты через env vars.** `service_token` и `llm.api_key` — `SecretStr`, загружаются
-    из env vars `VK_SERVICE_TOKEN` и `VK_LLM_API_KEY` (приоритет над `config.yaml`).
-    `config.yaml` содержит пустые строки-заглушки. `SecretStr` маскирует значение в `repr()`
-    и логах; получить строку — `.get_secret_value()`. `.env` в `.gitignore`.
+    `filter_mode` и `llm_model` при `filter_mode=="llm"`.
+21. **Секреты через env vars.** `service_token` и `llm_api_key` — `SecretStr`, загружаются
+    из env vars `VK_SERVICE_TOKEN` и `VK_LLM_API_KEY`.
+    `SecretStr` маскирует значение в `repr()` и логах; получить строку — `.get_secret_value()`.
+    `.env` в `.gitignore`.
 19. **Декомпозиция PostFilter.** `post_filter.py` содержит `PostFilterProtocol` (Protocol),
     `DateFilter`, `EmptyTextFilter`, `StopWordsFilter`, `LLMTopicFilter` (один класс — одна проверка) и
     `FilterChain` (композит, `filter(posts) -> list[Post]`; LLMTopicFilter в цепочку не входит —
     вызывается только через `LLMFilterStage`). `CollectStage._accept()` вызывает
     `FilterChain.filter()` inline — ранний выход сохранён.
-20. **LLM-фильтрация опциональна.** `filter_mode` в `SearchConfig`: `"stop_words"` (по умолчанию)
+20. **LLM-фильтрация опциональна.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию)
     или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
     каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
     (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
 
 ### Практики тестирования
 
-- Один класс тестов на модуль: `TestConfigLoader`, `TestVKApiClient`, `TestApiSearchService`,
+- Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
   `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestStateStore`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
   `patch("vk_api_client.requests.get")` и `patch("vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.
 - **Фикстуры в `tests/conftest.py`** — переиспользовать их, не дублировать:
-  `mock_config_data` / `mock_config_file` / `mock_config` (готовый YAML во временном каталоге),
+  `mock_config_data` / `mock_config` (готовый `Settings` с дефолтами),
   `mock_logger`, `mock_driver`, `tmp_db_path`, `http_fixture_server`.
 - Реальные данные VK в тестах не используются; HTML-разметку кнопки лайка повторяет
   `tests/fixtures/vk_post.html` — при изменении селекторов обновлять и фиксут.
@@ -276,14 +274,14 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Конфигурация и секреты
 
-- **Секреты загружаются из env vars** (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`), не из `config.yaml`.
-  `config.yaml` содержит пустые строки-заглушки. `SecretStr` маскирует значение в `repr()` и логах.
+- **Секреты загружаются из env vars** (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`), не из YAML.
+  `SecretStr` маскирует значение в `repr()` и логах.
   Не выводить секреты в логи, ответы, комментарии, тесты и документацию. В `requirements`/тестах используется
   только заглушка `"test_token"`.
 - Для лайков токен не поможет — `likes.add` через API недоступен, нужен браузер.
 - `chrome_profile/`, `*.db`, `*.log` уже в `.gitignore` —
   не добавлять их в индекс и не коммитить.
-- Любые изменения в `config.yaml` (особенно лимиты и источники) — только с явного
+- Любые изменения в `Settings` (особенно лимиты и источники) — только с явного
   согласия пользователя: они напрямую влияют на риск блокировки аккаунта.
 
 ### Эксплуатационные ограничения
@@ -301,7 +299,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 1. Прочитать затронутый модуль и его тест **до** изменений — соглашения здесь важнее
    общих предпочтений.
 2. Новую функциональность оформлять как отдельный сервис в `src/` (один класс = один файл),
-   подключать его в `AutoLiker.__init__`, а параметры — в `AppConfig` + `config.yaml`.
+   подключать его в `AutoLiker.__init__`, а параметры — в `Settings` (`settings.py`).
 3. Обновлять docstrings на русском, включая пояснение *почему* выбран такой подход.
 4. Писать юнит-тесты на моках; при правках DOM-селекторов — фиксут + `-m browser`.
 5. Прогонять `pytest -m "not browser and not live"` перед отчётом о готовности.
@@ -322,7 +320,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 через `skill` tool перед началом работы, если задача подходит под описание:
 
 - **`oop-design`** — перед проектированием нового класса, сервиса, модуля; при рефакторинге архитектуры; при выборе между наследованием и композицией.
-- **`vk-autoliker-conventions`** — перед любой правкой в `src/` или созданием нового сервиса; при работе с VK API, Selenium, SQLite, `config.yaml`.
+- **`vk-autoliker-conventions`** — перед любой правкой в `src/` или созданием нового сервиса; при работе с VK API, Selenium, SQLite, `settings.py`.
 - **`testing-with-mocks`** — перед написанием или правкой тестов.
 - **`code-review`** — при запросе code review, ревью кода, проверке изменений или кода по критериям.
 - **`implementation-cycle`** — перед любой задачей реализации, правки кода или фикса; стандартизированный цикл: коммит незакоммиченного → очистка контекста → реализация → ревью → сообщения для комитов.

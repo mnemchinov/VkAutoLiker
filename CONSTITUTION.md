@@ -120,13 +120,12 @@ accounts → auto_friends → auto_groups.
 
 ## Article VIII: Configuration & Secrets (MUST)
 
-- `config.yaml` MUST NOT логироваться, выводиться или коммититься с реальным
-  токеном.
+- Секреты (токены) MUST загружаться из env vars (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`),
+  не из файлов в git.
 - Тестовый код MUST использовать заглушку `"test_token"`.
-- `chrome_profile/`, `*.db`, `*.log` MUST быть в `.gitignore`.
-- Новые настройки MUST добавляться в `config.py` (pydantic-модель с
-  дефолтом) И `config.yaml` (с комментарием).
-- Магические числа в бизнес-логике запрещены — всё из `AppConfig`.
+- `chrome_profile/`, `*.db`, `*.log`, `.env` MUST быть в `.gitignore`.
+- Новые настройки MUST добавляться в `settings.py` (поле `Settings` с дефолтом).
+- Магические числа в бизнес-логике запрещены — всё из `Settings`.
 
 **Rationale**: Утечка токена компрометирует аккаунт; отсутствие типа — источник
 тихих ошибок.
