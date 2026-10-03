@@ -26,6 +26,7 @@ class TestSettings:
         monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
         monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
         monkeypatch.delenv("VK_QUERIES", raising=False)
+        monkeypatch.delenv("VK_FILTER_MODE", raising=False)
         s = Settings(_env_file=None)
 
         assert s.service_token.get_secret_value() == ""
@@ -68,7 +69,9 @@ class TestSettings:
         assert s.llm_model == "openai/gpt-4o-mini"
         assert s.llm_api_key.get_secret_value() == "test-llm-key"
         assert s.llm_timeout == 10
+        assert s.llm_max_tokens == 1000
         assert s.llm_max_text_length == 500
+        assert s.llm_ssl_verify is True
 
     def test_limits_fields(self, mock_config_data, monkeypatch):
         """Поля лимитов доступны на верхнем уровне."""

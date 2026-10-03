@@ -97,6 +97,55 @@ class TestLLMTopicFilter:
         with patch("litellm.completion", return_value=_mock_llm_response("  skip  ")):
             assert f.should_skip(post) is True
 
+    def test_system_prompt_built_from_stop_topics(self, mock_config, mock_logger):
+        """Промпт собирается из llm_stop_topics, если llm_system_prompt пуст."""
+        from post_filter import LLMTopicFilter
+
+        mock_config.llm_system_prompt = ""
+        mock_config.llm_stop_topics = ["политика", "религия"]
+        f = LLMTopicFilter(mock_config, mock_logger)
+
+        assert "политика" in f._system_prompt
+        assert "религия" in f._system_prompt
+        assert "SKIP" in f._system_prompt
+
+    def test_custom_system_prompt_overrides_stop_topics(self, mock_config, mock_logger):
+        """llm_system_prompt переопределяет сборку из llm_stop_topics."""
+        from post_filter import LLMTopicFilter
+
+        mock_config.llm_system_prompt = "Кастомный промпт"
+        mock_config.llm_stop_topics = ["политика"]
+        f = LLMTopicFilter(mock_config, mock_logger)
+
+        assert f._system_prompt == "Кастомный промпт"
+
+    def test_ssl_verify_false_sets_client_session(self, mock_config, mock_logger):
+        """llm_ssl_verify=False → litellm.client_session с verify=False."""
+        import httpx
+        import litellm
+
+        from post_filter import LLMTopicFilter
+
+        mock_config.llm_ssl_verify = False
+        LLMTopicFilter(mock_config, mock_logger)
+
+        assert litellm.client_session is not None
+        assert isinstance(litellm.client_session, httpx.Client)
+
+        litellm.client_session = None
+
+    def test_ssl_verify_true_does_not_set_client_session(self, mock_config, mock_logger):
+        """llm_ssl_verify=True → litellm.client_session не трогается."""
+        import litellm
+
+        from post_filter import LLMTopicFilter
+
+        litellm.client_session = None
+        mock_config.llm_ssl_verify = True
+        LLMTopicFilter(mock_config, mock_logger)
+
+        assert litellm.client_session is None
+
 
 class TestLLMFilterStage:
     """Тесты LLMFilterStage.process — фильтрация списка постов."""

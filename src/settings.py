@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     VK API: service_token, api_version, base_url.
     Браузер: profile_path, headless.
     Поиск: queries, hashtags, groups, accounts, auto_friends, auto_groups, лимиты сбора.
-    LLM: llm_model, llm_api_base, llm_api_key, llm_system_prompt, llm_timeout, llm_max_text_length.
+    LLM: llm_model, llm_api_base, llm_api_key, llm_system_prompt, llm_timeout, llm_max_text_length, llm_ssl_verify.
     Лимиты/задержки: likes_per_session_min/max, sessions_per_day, delays, max_captcha_streak.
     Логирование: log_level, log_file.
     SQLite: db_path.
@@ -81,8 +81,20 @@ class Settings(BaseSettings):
     llm_api_base: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_system_prompt: str = ""
+    llm_stop_topics: Annotated[list[str], NoDecode] = [
+        "политика, выборы, государственная власть, партии, идеологии",
+        "религия, вероисповедание, секты, религиозная проповедь",
+        "секс, порно, эротика, интимные темы",
+        "алкоголь, курение, наркотики, азартные игры",
+        "оружие, насилие, экстремизм, терроризм",
+        "криптовалюта, финансовые пирамиды, мошенничество",
+        "спам, реклама запрещённых товаров и услуг",
+        "конфликты, оскорбления, травля, провокации",
+    ]
     llm_timeout: int = 10
+    llm_max_tokens: int = 1000
     llm_max_text_length: int = 500
+    llm_ssl_verify: bool = True
 
     # Лимиты и задержки (все рандомизируются через random.uniform)
     likes_per_session_min: int = 20
@@ -101,7 +113,8 @@ class Settings(BaseSettings):
     # SQLite
     db_path: str = "vk_autoliker.db"
 
-    @field_validator("queries", "hashtags", "groups", "accounts", "stop_words", mode="before")
+    @field_validator("queries", "hashtags", "groups", "accounts", "stop_words",
+                     "llm_stop_topics", mode="before")
     @classmethod
     def _parse_list_fields(cls, v):
         """Парсит comma-separated строки из env vars в списки."""

@@ -53,8 +53,11 @@ def mock_config_data():
         "llm_api_base": "",
         "llm_api_key": "test-llm-key",
         "llm_system_prompt": "",
+        "llm_stop_topics": ["политика", "религия"],
         "llm_timeout": 10,
+        "llm_max_tokens": 1000,
         "llm_max_text_length": 500,
+        "llm_ssl_verify": True,
     }
 
 

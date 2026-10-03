@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+import httpx
 import litellm
 
 from logger import AppLogger
@@ -118,14 +119,11 @@ class FilterChain:
         return [p for p in posts if not any(f.should_skip(p) for f in self._filters)]
 
 
-DEFAULT_SYSTEM_PROMPT = """Ты — модератор постов ВКонтакте. \
-Определи, подходит ли пост для автоматического лайка корпоративным аккаунтом.
+DEFAULT_SYSTEM_PROMPT_TEMPLATE = """Ты — модератор постов ВКонтакте. \
+Определи, подходит ли пост для автоматического лайка.
 
-Отклоняй (ответ SKIP) посты на темы: политика, выборы, секс, порно, религия, \
-алкоголь, курение, наркотики, азартные игры, оружие, экстремизм, криптовалюта.
-
-Разрешай (ответ OK) нейтральные посты: новости компании, продукция, акции, \
-повседневный контент, рецепты, лайфхаки, кухня, быт, спорт без политики.
+Отклоняй (ответ SKIP) посты на темы:
+{topics}
 
 Ответь только одним словом: SKIP или OK."""
 
@@ -142,10 +140,25 @@ class LLMTopicFilter:
     """
 
     def __init__(self, config: Settings, logger: AppLogger):
-        """Инициализирует LLM-фильтр с параметрами из конфигурации."""
+        """Инициализирует LLM-фильтр с параметрами из конфигурации.
+
+        Промпт собирается из config.llm_stop_topics (список стоп-тем),
+        если config.llm_system_prompt не задан явно.
+
+        При llm_ssl_verify=False устанавливает litellm.client_session с
+        отключённой проверкой SSL — для корпоративных endpoint'ов с
+        самоподписанным CA-сертификатом, отсутствующим в certifi.
+        """
         self._config = config
         self._logger = logger
-        self._system_prompt = config.llm_system_prompt or DEFAULT_SYSTEM_PROMPT
+        if config.llm_system_prompt:
+            self._system_prompt = config.llm_system_prompt
+        else:
+            topics = "\n".join(f"— {t};" for t in config.llm_stop_topics)
+            self._system_prompt = DEFAULT_SYSTEM_PROMPT_TEMPLATE.format(topics=topics)
+
+        if not config.llm_ssl_verify:
+            litellm.client_session = httpx.Client(verify=False, follow_redirects=True)
 
     def should_skip(self, post: Post) -> bool:
         """True, если LLM определил пост как нежелательный (SKIP).
@@ -167,12 +180,13 @@ class LLMTopicFilter:
                 api_key=self._config.llm_api_key.get_secret_value() or None,
                 timeout=self._config.llm_timeout,
                 temperature=0,
-                max_tokens=1,
+                max_tokens=self._config.llm_max_tokens,
             )
             answer = response.choices[0].message.content.strip().upper()
             skip = "SKIP" in answer
-            if skip:
-                self._logger.debug(f"LLM отсеял пост {post.owner_id}_{post.item_id}: {text[:50]}")
+            self._logger.info(
+                f"LLM: пост {post.owner_id}_{post.item_id} → ответ={answer!r} skip={skip}"
+            )
             return skip
         except Exception as e:
             self._logger.warning(f"Ошибка LLM для поста {post.owner_id}_{post.item_id}: {e}")
