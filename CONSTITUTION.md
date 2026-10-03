@@ -124,7 +124,7 @@ accounts → auto_friends → auto_groups.
   токеном.
 - Тестовый код MUST использовать заглушку `"test_token"`.
 - `chrome_profile/`, `*.db`, `*.log` MUST быть в `.gitignore`.
-- Новые настройки MUST добавляться в `config.py` (dataclass + `.get()` с
+- Новые настройки MUST добавляться в `config.py` (pydantic-модель с
   дефолтом) И `config.yaml` (с комментарием).
 - Магические числа в бизнес-логике запрещены — всё из `AppConfig`.
 

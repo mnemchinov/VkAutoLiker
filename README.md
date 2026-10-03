@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-109%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-110%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-75%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
@@ -55,13 +55,13 @@ pip install -r requirements.txt
 2. Скопировать service-ключ в разделе «Ключи доступа»
 3. Лимит без верификации приложения: 10 000 вызовов/мес
 
-### 3. Заполнить `config.yaml`
+### 3. Заполнить `config.yaml` и `.env`
 
 Минимум для работы:
 
 ```yaml
 api:
-  service_token: "ваш_токен"       # service-ключ из кабинета разработчика
+  service_token: ""                 # оставить пустым — токен задаётся через env var
 
 search:
   user_id: 12345678                # ваш VK ID (числовой)
@@ -69,6 +69,13 @@ search:
     - "#вашХештег"
   auto_friends: true               # собирать посты со стен друзей
   auto_groups: true                # собирать посты со стен подписок
+```
+
+Секреты задаются через переменные окружения в файле `.env` (в корне проекта, в `.gitignore`):
+
+```
+VK_SERVICE_TOKEN=ваш_service_токен
+VK_LLM_API_KEY=ваш_llm_ключ
 ```
 
 Остальные параметры — см. [Параметры config.yaml](#параметры-configyaml).
@@ -122,7 +129,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 
 | Параметр | По умолч. | Описание |
 |---|---|---|
-| `service_token` | — | Service-токен приложения VK |
+| `service_token` | — | Service-токен (через env var `VK_SERVICE_TOKEN`) |
 | `api_version` | `5.131` | Версия VK API |
 | `base_url` | `https://api.vk.ru/method` | Базовый URL для вызовов |
 
@@ -305,7 +312,7 @@ requirements.txt       — зависимости
 src/                   — весь код (плоская структура, без __init__.py)
   main.py              — CLI: login | run | test | status | reset + fcntl file lock
   liker.py             — AutoLiker: оркестратор цикла
-  config.py            — AppConfig + ConfigLoader (dataclass-модели)
+  config.py            — AppConfig + load_config (pydantic-модели)
   vk_api_client.py     — VKApiClient: HTTP + rate-limit 3 req/sec + ретраи
   api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
   post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter
@@ -325,11 +332,11 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 109 passed, 3 deselected (live-тесты пропускаются)
+pytest                                  # 110 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
-pytest --cov=src --cov-report=term-missing  # с покрытием (74%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 ```
 
 Три уровня:
