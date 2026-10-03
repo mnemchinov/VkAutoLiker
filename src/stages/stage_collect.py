@@ -69,11 +69,14 @@ class CollectStage:
             )
             _accept(posts)
 
-        for hashtag in self._config.hashtags:
-            posts = self._search.search_hashtag(
-                hashtag, max_posts=self._config.max_posts_per_hashtag
-            )
-            _accept(posts)
+        if len(all_posts) >= enough:
+            self._logger.info(f"Достаточно постов ({len(all_posts)}), пропуск hashtags")
+        else:
+            for hashtag in self._config.hashtags:
+                posts = self._search.search_hashtag(
+                    hashtag, max_posts=self._config.max_posts_per_hashtag
+                )
+                _accept(posts)
 
         if len(all_posts) < enough:
             for screen_name in self._config.groups:

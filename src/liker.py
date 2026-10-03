@@ -16,7 +16,7 @@ from logger import AppLogger
 from post import Post
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from settings import Settings
-from stages import CollectStage, DedupStage, Pipeline, PipelineContext
+from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
 from state_store import StateStore
 
 
@@ -49,7 +49,6 @@ class AutoLiker:
             DedupStage(),
         ]
         if config.filter_mode == "llm":
-            from stages import LLMFilterStage
             stages.append(LLMFilterStage(config, logger))
         self._pipeline = Pipeline(stages)
 
@@ -109,6 +108,11 @@ class AutoLiker:
         no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
         сессия записывается с is_auto=True.
         """
+        self._browser.start()
+        if not self._browser.is_logged_in():
+            self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
+            return
+
         # Jitter для авто-запуска: размывает фиксированные слоты launchd (10:00, 14:00, 19:00)
         if not no_limit:
             jitter = random.uniform(0, 1800)
@@ -119,11 +123,6 @@ class AutoLiker:
             self._logger.info("=== Сессия AutoLiker запущена (без учёта лимита) ===")
         else:
             self._logger.info("=== Сессия AutoLiker запущена ===")
-
-        self._browser.start()
-        if not self._browser.is_logged_in():
-            self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
-            return
 
         if not no_limit:
             sessions_today, _likes_today = self._state.get_daily_stats()

@@ -143,6 +143,7 @@ class StateStore:
         """Полностью очищает таблицы processed_posts и sessions."""
         self._conn.execute("DELETE FROM processed_posts")
         self._conn.execute("DELETE FROM sessions")
+        self._conn.execute("DELETE FROM closed_walls")
         self._conn.commit()
         self._logger.info("База данных очищена")
 

@@ -147,8 +147,13 @@ class VKBrowser:
         if not profile.is_dir():
             return
 
-        total_bytes = sum(f.stat().st_size for f in profile.rglob("*") if f.is_file())
-        total_mb = total_bytes / (1024 * 1024)
+        try:
+            result = subprocess.run(
+                ["du", "-sk", str(profile)], capture_output=True, text=True, check=True
+            )
+            total_mb = int(result.stdout.split()[0]) / 1024
+        except (subprocess.CalledProcessError, ValueError, IndexError):
+            return
 
         if total_mb > self._config.profile_max_size_mb:
             self._logger.warning(

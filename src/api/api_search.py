@@ -53,10 +53,9 @@ class ApiSearchService:
                     "filter": "owner",
                 })
             except VKApiError as e:
-                if e.code == 15:
-                    self._logger.warning(f"Стена закрыта: owner_id={owner_id}")
-                else:
-                    self._logger.warning(f"Ошибка wall.get owner_id={owner_id}: {e}")
+                if e.code in (15, 18, 30):
+                    raise
+                self._logger.warning(f"Ошибка wall.get owner_id={owner_id}: {e}")
                 break
             items = resp.get("items", [])
             if not items:
