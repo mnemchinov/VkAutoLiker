@@ -9,7 +9,7 @@ from typing import TextIO
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import ConfigLoader
+from config import load_config
 from liker import AutoLiker
 from logger import AppLogger
 
@@ -58,8 +58,7 @@ def main() -> None:
 
     liker: AutoLiker | None = None
     try:
-        config_loader = ConfigLoader(args.config)
-        config = config_loader.load()
+        config = load_config(args.config)
         logger = AppLogger(config)
         liker = AutoLiker(config, logger)
 

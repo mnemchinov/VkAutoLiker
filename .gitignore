@@ -43,6 +43,7 @@ chrome_profile/
 *.db
 *.log
 .autoliker.lock
+.env
 
 # Distribution
 *.tar.gz

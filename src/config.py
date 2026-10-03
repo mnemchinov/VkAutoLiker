@@ -1,13 +1,19 @@
-"""Конфигурация приложения: dataclass-модели и загрузка из YAML."""
+"""Конфигурация приложения: pydantic-модели и загрузка из YAML + env vars.
 
-from dataclasses import dataclass, field
+Секреты (service_token, llm.api_key) загружаются из переменных окружения
+VK_SERVICE_TOKEN и VK_LLM_API_KEY; остальные параметры — из config.yaml.
+Env vars имеют приоритет над YAML. SecretStr маскирует секреты в repr() и логах.
+ConfigLoader удалён — вместо него тонкая функция load_config().
+"""
+
 from pathlib import Path
 
 import yaml
+from pydantic import BaseModel, Field, SecretStr, ValidationError, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass
-class ApiConfig:
+class ApiConfig(BaseModel):
     """Параметры доступа к VK API через service-токен.
 
     Service-токен работает для всех методов поиска (newsfeed.search, wall.get,
@@ -15,13 +21,12 @@ class ApiConfig:
     Получается в кабинете разработчика: https://dev.vk.ru/ru/admin/create-app
     """
 
-    service_token: str = ""
+    service_token: SecretStr = SecretStr("")
     api_version: str = "5.131"
     base_url: str = "https://api.vk.ru/method"
 
 
-@dataclass
-class BrowserConfig:
+class BrowserConfig(BaseModel):
     """Параметры Selenium Chrome с персистентным профилем.
 
     profile_path — каталог пользовательского профиля Chrome; сохраняет сессию VK
@@ -33,8 +38,7 @@ class BrowserConfig:
     headless: bool = False
 
 
-@dataclass
-class SearchConfig:
+class SearchConfig(BaseModel):
     """Параметры сбора постов: источники, лимиты глубины и фильтр по давности.
 
     Источники постов (комбинируются):
@@ -51,9 +55,9 @@ class SearchConfig:
 
     queries: list[str]
     user_id: int = 0
-    hashtags: list[str] = field(default_factory=list)
-    groups: list[str] = field(default_factory=list)
-    accounts: list[str] = field(default_factory=list)
+    hashtags: list[str] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
+    accounts: list[str] = Field(default_factory=list)
     auto_friends: bool = False
     auto_groups: bool = False
     max_posts_per_query: int = 100
@@ -64,18 +68,17 @@ class SearchConfig:
     max_friends_to_collect: int = 200
     max_groups_to_collect: int = 200
     days_back: int = 30
-    stop_words: list[str] = field(default_factory=list)
+    stop_words: list[str] = Field(default_factory=list)
     stop_words_file: str = ""
     filter_mode: str = "stop_words"
 
 
-@dataclass
-class LLMConfig:
+class LLMConfig(BaseModel):
     """Параметры LLM-фильтра тематики постов через litellm.
 
     model — идентификатор модели в формате litellm (например "openai/gpt-4o-mini").
     api_base — базовый URL API провайдера (пустая строка = дефолт litellm).
-    api_key — ключ API провайдера.
+    api_key — ключ API провайдера (SecretStr, загружается из VK_LLM_API_KEY).
     system_prompt — системный промпт для классификации (пустая строка = дефолтный).
     timeout — таймаут запроса к LLM в секундах.
     max_text_length — макс. длина текста поста, отправляемого в LLM.
@@ -83,14 +86,13 @@ class LLMConfig:
 
     model: str = ""
     api_base: str = ""
-    api_key: str = ""
+    api_key: SecretStr = SecretStr("")
     system_prompt: str = ""
     timeout: int = 10
     max_text_length: int = 500
 
 
-@dataclass
-class LimitsConfig:
+class LimitsConfig(BaseModel):
     """Лимиты и задержки для снижения риска блокировки.
 
     Все задержки рандомизируются через random.uniform(min, max) — фиксированных
@@ -107,24 +109,26 @@ class LimitsConfig:
     max_captcha_streak: int = 3
 
 
-@dataclass
-class LoggingConfig:
+class LoggingConfig(BaseModel):
     """Настройки логирования в консоль и файл."""
 
     level: str = "INFO"
     file: str = "vk_autoliker.log"
 
 
-@dataclass
-class StateConfig:
+class StateConfig(BaseModel):
     """Путь к SQLite-базе для хранения истории обработанных постов и сессий."""
 
     db_path: str = "vk_autoliker.db"
 
 
-@dataclass
-class AppConfig:
-    """Корневая конфигурация приложения."""
+class AppConfig(BaseSettings):
+    """Корневая конфигурация приложения.
+
+    Секреты загружаются из env vars (VK_SERVICE_TOKEN, VK_LLM_API_KEY)
+    и имеют приоритет над значениями в config.yaml. SecretStr маскирует
+    секреты в repr() и логах — получить строку можно через .get_secret_value().
+    """
 
     api: ApiConfig
     browser: BrowserConfig
@@ -132,104 +136,44 @@ class AppConfig:
     limits: LimitsConfig
     logging: LoggingConfig
     state: StateConfig
-    llm: LLMConfig = field(default_factory=LLMConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
+    # Секреты из env vars (приоритет над YAML-значениями в под-конфигах)
+    service_token: SecretStr = SecretStr("")
+    llm_api_key: SecretStr = SecretStr("")
 
-class ConfigLoader:
-    """Загружает конфигурацию из YAML-файла и кэширует результат."""
+    model_config = SettingsConfigDict(
+        env_prefix="VK_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-    def __init__(self, config_path: str = "config.yaml"):
-        """Инициализирует загрузчик с путём к YAML-файлу."""
-        self._config_path = Path(config_path)
-        self._config: AppConfig | None = None
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """Приоритет источников: env vars > .env > init (YAML)."""
+        return (env_settings, dotenv_settings, init_settings)
 
-    def load(self) -> AppConfig:
-        """Загружает конфигурацию из YAML, кэширует и возвращает AppConfig."""
-        if not self._config_path.exists():
-            raise FileNotFoundError(f"Файл конфигурации не найден: {self._config_path}")
+    @model_validator(mode="after")
+    def _inject_secrets_and_validate(self) -> "AppConfig":
+        """Внедряет секреты из env vars в под-конфиги и валидирует параметры.
 
-        with open(self._config_path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
-
-        if raw is None:
-            raise ValueError("Файл конфигурации пуст")
-
-        api_raw = raw.get("api", {})
-        browser_raw = raw.get("browser", {})
-        search_raw = raw.get("search", {})
-        limits_raw = raw.get("limits", {})
-        logging_raw = raw.get("logging", {})
-        state_raw = raw.get("state", {})
-        llm_raw = raw.get("llm", {})
-
-        self._config = AppConfig(
-            api=ApiConfig(
-                service_token=api_raw.get("service_token", ""),
-                api_version=api_raw.get("api_version", "5.131"),
-                base_url=api_raw.get("base_url", "https://api.vk.ru/method"),
-            ),
-            browser=BrowserConfig(
-                profile_path=browser_raw.get("profile_path", "./chrome_profile"),
-                headless=browser_raw.get("headless", False),
-            ),
-            search=SearchConfig(
-                queries=search_raw.get("queries", []),
-                user_id=search_raw.get("user_id", 0),
-                hashtags=search_raw.get("hashtags", []),
-                groups=search_raw.get("groups", []),
-                accounts=search_raw.get("accounts", []),
-                auto_friends=search_raw.get("auto_friends", False),
-                auto_groups=search_raw.get("auto_groups", False),
-                max_posts_per_query=search_raw.get("max_posts_per_query", 100),
-                max_posts_per_hashtag=search_raw.get("max_posts_per_hashtag", 100),
-                max_posts_per_group=search_raw.get("max_posts_per_group", 100),
-                max_posts_per_account=search_raw.get("max_posts_per_account", 100),
-                max_posts_per_friend=search_raw.get("max_posts_per_friend", 10),
-                max_friends_to_collect=search_raw.get("max_friends_to_collect", 200),
-                max_groups_to_collect=search_raw.get("max_groups_to_collect", 200),
-                days_back=search_raw.get("days_back", 30),
-                stop_words=search_raw.get("stop_words", []),
-                stop_words_file=search_raw.get("stop_words_file", ""),
-                filter_mode=search_raw.get("filter_mode", "stop_words"),
-            ),
-            limits=LimitsConfig(
-                likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
-                likes_per_session_max=limits_raw.get("likes_per_session_max", 30),
-                sessions_per_day=limits_raw.get("sessions_per_day", 3),
-                min_delay_sec=limits_raw.get("min_delay_sec", 15),
-                max_delay_sec=limits_raw.get("max_delay_sec", 60),
-                view_delay_min_sec=limits_raw.get("view_delay_min_sec", 3),
-                view_delay_max_sec=limits_raw.get("view_delay_max_sec", 10),
-                max_captcha_streak=limits_raw.get("max_captcha_streak", 3),
-            ),
-            logging=LoggingConfig(
-                level=logging_raw.get("level", "INFO"),
-                file=logging_raw.get("file", "vk_autoliker.log"),
-            ),
-            state=StateConfig(
-                db_path=state_raw.get("db_path", "vk_autoliker.db"),
-            ),
-            llm=LLMConfig(
-                model=llm_raw.get("model", ""),
-                api_base=llm_raw.get("api_base", ""),
-                api_key=llm_raw.get("api_key", ""),
-                system_prompt=llm_raw.get("system_prompt", ""),
-                timeout=llm_raw.get("timeout", 10),
-                max_text_length=llm_raw.get("max_text_length", 500),
-            ),
-        )
-
-        self._validate(self._config)
-        return self._config
-
-    @staticmethod
-    def _validate(config: AppConfig) -> None:
-        """Проверяет корректность конфигурации: min <= max, days_back > 0 и т.д.
-
-        Raises:
-            ValueError: если параметр некорректен.
+        Если VK_SERVICE_TOKEN задан — перекрывает api.service_token из YAML.
+        Если VK_LLM_API_KEY задан — перекрывает llm.api_key из YAML.
         """
-        limits = config.limits
+        if self.service_token.get_secret_value():
+            self.api.service_token = self.service_token
+        if self.llm_api_key.get_secret_value():
+            self.llm.api_key = self.llm_api_key
+
+        limits = self.limits
         if limits.likes_per_session_min > limits.likes_per_session_max:
             raise ValueError(
                 f"likes_per_session_min ({limits.likes_per_session_min}) > "
@@ -244,22 +188,45 @@ class ConfigLoader:
                 f"view_delay_min_sec ({limits.view_delay_min_sec}) > "
                 f"view_delay_max_sec ({limits.view_delay_max_sec})"
             )
-        if config.search.days_back <= 0:
-            raise ValueError(f"days_back должен быть > 0, получено {config.search.days_back}")
-        if (config.search.auto_friends or config.search.auto_groups) and config.search.user_id <= 0:
+        if self.search.days_back <= 0:
+            raise ValueError(f"days_back должен быть > 0, получено {self.search.days_back}")
+        if (self.search.auto_friends or self.search.auto_groups) and self.search.user_id <= 0:
             raise ValueError(
                 "auto_friends/auto_groups включены, но user_id не задан (должен быть > 0)"
             )
-        if config.search.filter_mode not in ("stop_words", "llm"):
+        if self.search.filter_mode not in ("stop_words", "llm"):
             raise ValueError(
-                f"filter_mode должен быть 'stop_words' или 'llm', получено '{config.search.filter_mode}'"
+                f"filter_mode должен быть 'stop_words' или 'llm', "
+                f"получено '{self.search.filter_mode}'"
             )
-        if config.search.filter_mode == "llm" and not config.llm.model:
+        if self.search.filter_mode == "llm" and not self.llm.model:
             raise ValueError("filter_mode='llm', но llm.model не задан")
 
-    @property
-    def config(self) -> AppConfig:
-        """Возвращает кэшированную конфигурацию (загружает при первом обращении)."""
-        if self._config is None:
-            return self.load()
-        return self._config
+        return self
+
+
+def load_config(config_path: str = "config.yaml", **kwargs) -> AppConfig:
+    """Загружает конфигурацию из YAML-файла; секреты — из env vars.
+
+    Args:
+        config_path: путь к YAML-файлу конфигурации.
+        **kwargs: дополнительные аргументы для AppConfig (например, _env_file=None).
+
+    Raises:
+        FileNotFoundError: если файл конфигурации не найден.
+        ValueError: если файл пуст или конфигурация невалидна.
+    """
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Файл конфигурации не найден: {path}")
+
+    with open(path, encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    if raw is None:
+        raise ValueError("Файл конфигурации пуст")
+
+    try:
+        return AppConfig(**raw, **kwargs)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e

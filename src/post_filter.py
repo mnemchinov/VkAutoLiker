@@ -164,7 +164,7 @@ class LLMTopicFilter:
                     {"role": "user", "content": text},
                 ],
                 api_base=self._config.api_base or None,
-                api_key=self._config.api_key or None,
+                api_key=self._config.api_key.get_secret_value() or None,
                 timeout=self._config.timeout,
                 temperature=0,
                 max_tokens=1,

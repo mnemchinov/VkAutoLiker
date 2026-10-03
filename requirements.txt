@@ -7,3 +7,5 @@ litellm>=1.0.0
 pytest>=8.0.0
 pytest-cov>=4.0.0
 ruff>=0.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.0

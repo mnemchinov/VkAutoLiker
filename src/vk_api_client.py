@@ -41,7 +41,7 @@ class VKApiClient:
 
     def __init__(self, config: AppConfig, logger: AppLogger):
         """Инициализирует клиент с service-токеном и параметрами rate-лимита."""
-        self._token = config.api.service_token
+        self._token = config.api.service_token.get_secret_value()
         self._api_version = config.api.api_version
         self._base_url = config.api.base_url
         self._logger = logger
