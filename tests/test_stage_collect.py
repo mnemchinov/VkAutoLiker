@@ -30,6 +30,7 @@ def collect_stage(mock_config, mock_logger):
     search = MagicMock()
     state = MagicMock()
     state.is_processed = MagicMock(return_value=False)
+    state.is_wall_closed = MagicMock(return_value=False)
     post_filter = MagicMock()
     post_filter.filter = lambda posts: list(posts)
 

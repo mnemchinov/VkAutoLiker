@@ -58,6 +58,8 @@ def mock_config_data():
         "llm_max_tokens": 1000,
         "llm_max_text_length": 500,
         "llm_ssl_verify": True,
+        "closed_wall_ttl_days": 7,
+        "profile_max_size_mb": 500,
     }
 
 

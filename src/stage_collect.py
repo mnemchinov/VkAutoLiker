@@ -81,12 +81,16 @@ class CollectStage:
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID группы: {screen_name}")
                     continue
+                if self._state.is_wall_closed(owner_id):
+                    self._logger.info(f"Стена группы {screen_name} закрыта (кэш), пропуск")
+                    continue
                 try:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_group
                     )
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {screen_name}: {e}")
+                    self._state.mark_wall_closed(owner_id)
                     continue
                 _accept(posts)
 
@@ -96,12 +100,16 @@ class CollectStage:
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID пользователя: {screen_name}")
                     continue
+                if self._state.is_wall_closed(owner_id):
+                    self._logger.info(f"Стена пользователя {screen_name} закрыта (кэш), пропуск")
+                    continue
                 try:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_account
                     )
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов пользователя {screen_name}: {e}")
+                    self._state.mark_wall_closed(owner_id)
                     continue
                 _accept(posts)
 
@@ -121,6 +129,8 @@ class CollectStage:
                     self._logger.info(f"Достигнут лимит API-вызовов к друзьям ({api_calls})")
                     break
                 api_calls += 1
+                if self._state.is_wall_closed(fid):
+                    continue
                 try:
                     posts = self._search.get_wall_posts(
                         fid, max_posts=self._config.max_posts_per_friend
@@ -128,6 +138,7 @@ class CollectStage:
                     _accept(posts)
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов друга {fid}: {e}")
+                    self._state.mark_wall_closed(fid)
                     continue
 
         if len(all_posts) < enough and self._config.auto_groups and self._config.user_id:
@@ -146,6 +157,8 @@ class CollectStage:
                     self._logger.info(f"Достигнут лимит API-вызовов к группам ({api_calls})")
                     break
                 api_calls += 1
+                if self._state.is_wall_closed(gid):
+                    continue
                 try:
                     posts = self._search.get_wall_posts(
                         gid, max_posts=self._config.max_posts_per_group
@@ -153,8 +166,10 @@ class CollectStage:
                     _accept(posts)
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {gid}: {e}")
+                    self._state.mark_wall_closed(gid)
                     continue
 
         self._logger.info(f"Собрано {len(all_posts)} необработанных постов")
+        self._filter.log_summaries()
         ctx.posts = all_posts
         return ctx

@@ -85,6 +85,8 @@ class StopWordsFilter:
     def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует фильтр стоп-слов из файла и inline-списка Settings."""
         self._logger = logger
+        self._checked: int = 0
+        self._skipped: int = 0
 
         file_words = self._load_stop_words_file(config.stop_words_file)
         inline_words = [w.lower() for w in config.stop_words]
@@ -132,40 +134,51 @@ class StopWordsFilter:
         """True, если текст поста содержит любое стоп-слово.
 
         Сначала проверяются substring-группы (быстро), затем лемматизация.
-        Каждый результат логируется на INFO — по аналогии с LLM-фильтром.
+        Совпадения логируются на INFO, OK — на DEBUG.
         """
+        self._checked += 1
         post_id = f"{post.owner_id}_{post.item_id}"
 
         if not self._stop_lemmas and not self._stop_substrings and not self._stop_phrases:
-            self._logger.info(f"Стоп-слова: пост {post_id} → OK (словарь пуст)")
+            self._logger.debug(f"Стоп-слова: пост {post_id} → OK (словарь пуст)")
             return False
 
         text_lower = post.text.lower()
 
         for s in self._stop_substrings:
             if s in text_lower:
+                self._skipped += 1
                 self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{s}' (substring)")
                 return True
         for p in self._stop_phrases:
             if p in text_lower:
+                self._skipped += 1
                 self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{p}' (фраза)")
                 return True
 
         if not self._stop_lemmas:
-            self._logger.info(f"Стоп-слова: пост {post_id} → OK")
+            self._logger.debug(f"Стоп-слова: пост {post_id} → OK")
             return False
 
         morph = self._get_morph()
         for token in re.findall(r"[а-яё]{3,}", text_lower):
             lemma = morph.parse(token)[0].normal_form
             if lemma in self._stop_lemmas:
+                self._skipped += 1
                 self._logger.info(
                     f"Стоп-слова: пост {post_id} → совпадение '{token}' → лемма '{lemma}'"
                 )
                 return True
 
-        self._logger.info(f"Стоп-слова: пост {post_id} → OK")
+        self._logger.debug(f"Стоп-слова: пост {post_id} → OK")
         return False
+
+    def log_summary(self) -> None:
+        """Логирует сводку: проверено N, отсеяно M (X%)."""
+        pct = round(self._skipped / self._checked * 100, 1) if self._checked else 0.0
+        self._logger.info(
+            f"Стоп-слова: проверено {self._checked}, отсеяно {self._skipped} ({pct}%)"
+        )
 
 
 class FilterChain:
@@ -183,6 +196,12 @@ class FilterChain:
     def filter(self, posts: list[Post]) -> list[Post]:
         """Возвращает посты, прошедшие все фильтры."""
         return [p for p in posts if not any(f.should_skip(p) for f in self._filters)]
+
+    def log_summaries(self) -> None:
+        """Вызывает log_summary() у всех фильтров, у которых он есть."""
+        for f in self._filters:
+            if hasattr(f, "log_summary"):
+                f.log_summary()
 
 
 DEFAULT_SYSTEM_PROMPT_TEMPLATE = """Ты — модератор постов ВКонтакте. \

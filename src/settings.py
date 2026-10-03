@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     # SQLite
     db_path: str = "vk_autoliker.db"
 
+    # Кэш закрытых стен
+    closed_wall_ttl_days: int = 7
+
+    # Профиль Chrome
+    profile_max_size_mb: int = 500
+
     @field_validator("queries", "hashtags", "groups", "accounts", "stop_words",
                      "llm_stop_topics", mode="before")
     @classmethod

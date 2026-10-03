@@ -13,7 +13,8 @@ class StateStore:
 
     Таблицы:
       processed_posts (owner_id, item_id, liked_at) — дедупликация;
-      sessions (id, started_at, ended_at, likes_count, session_date, is_auto) — лимиты.
+      sessions (id, started_at, ended_at, likes_count, session_date, is_auto) — лимиты;
+      closed_walls (owner_id, last_checked) — кэш закрытых/приватных стен.
       is_auto=1 — сессия запущена launchd (учитывается в дневном лимите).
       is_auto=0 — ручной запуск через --no-limit (не учитывается в дневном лимите).
     """
@@ -21,6 +22,7 @@ class StateStore:
     def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует SQLite-подключение и создаёт таблицы."""
         self._db_path = config.db_path
+        self._config = config
         self._logger = logger
         self._conn: sqlite3.Connection = sqlite3.connect(self._db_path)
         self._init_db()
@@ -43,6 +45,12 @@ class StateStore:
                 likes_count INTEGER DEFAULT 0,
                 session_date TEXT NOT NULL,
                 is_auto INTEGER DEFAULT 1
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS closed_walls (
+                owner_id INTEGER PRIMARY KEY,
+                last_checked INTEGER NOT NULL
             )
         """)
         self._migrate_sessions_is_auto()
@@ -142,3 +150,27 @@ class StateStore:
         """Закрывает SQLite-подключение."""
         if self._conn:
             self._conn.close()
+
+    def is_wall_closed(self, owner_id: int) -> bool:
+        """Проверяет, закрыта ли стена (в пределах TTL).
+
+        Если запись старше closed_wall_ttl_days дней — считаем устаревшей,
+        стену нужно перепроверить.
+        """
+        cursor = self._conn.execute(
+            "SELECT last_checked FROM closed_walls WHERE owner_id = ?",
+            (owner_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return False
+        ttl_sec = self._config.closed_wall_ttl_days * 86400
+        return (int(time.time()) - row[0]) < ttl_sec
+
+    def mark_wall_closed(self, owner_id: int) -> None:
+        """Отмечает стену как закрытую/приватную (INSERT OR REPLACE)."""
+        self._conn.execute(
+            "INSERT OR REPLACE INTO closed_walls (owner_id, last_checked) VALUES (?, ?)",
+            (owner_id, int(time.time())),
+        )
+        self._conn.commit()

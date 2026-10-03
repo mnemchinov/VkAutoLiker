@@ -41,11 +41,13 @@ class AutoLiker:
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._state = StateStore(config, logger)
-        self._filter = FilterChain([
+        filters: list = [
             DateFilter(config.days_back),
             EmptyTextFilter(),
-            StopWordsFilter(config, logger),
-        ])
+        ]
+        if config.filter_mode == "stop_words":
+            filters.append(StopWordsFilter(config, logger))
+        self._filter = FilterChain(filters)
         stages: list = [
             CollectStage(self._search_service, config, self._state, self._filter, logger),
             DedupStage(),

@@ -3,6 +3,7 @@
 import os
 import platform
 import random
+import shutil
 import signal
 import subprocess
 import time
@@ -30,6 +31,7 @@ class VKBrowser:
 
     def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует браузер с путём профиля и режимом headless из конфигурации."""
+        self._config = config
         self._profile_path = config.profile_path
         self._headless = config.headless
         self._logger = logger
@@ -134,14 +136,43 @@ class VKBrowser:
                 except OSError:
                     pass
 
+    def _cleanup_profile_cache(self) -> None:
+        """Проверяет размер профиля Chrome и чистит кэш при превышении лимита.
+
+        При размере профиля > profile_max_size_mb удаляет подкаталоги кэша:
+        Cache, Code Cache, GPUCache, Service Worker/CacheStorage.
+        Это предотвращает рост профиля до размеров, вызывающих SessionNotCreatedException.
+        """
+        profile = Path(self._profile_path)
+        if not profile.is_dir():
+            return
+
+        total_bytes = sum(f.stat().st_size for f in profile.rglob("*") if f.is_file())
+        total_mb = total_bytes / (1024 * 1024)
+
+        if total_mb > self._config.profile_max_size_mb:
+            self._logger.warning(
+                f"Размер профиля Chrome: {total_mb:.0f} MB > {self._config.profile_max_size_mb} MB — чистка кэша"
+            )
+            cache_dirs = ["Cache", "Code Cache", "GPUCache", "Service Worker/CacheStorage"]
+            for cache_name in cache_dirs:
+                cache_path = profile / cache_name
+                if cache_path.is_dir():
+                    try:
+                        shutil.rmtree(cache_path)
+                    except OSError as e:
+                        self._logger.debug(f"Не удалось удалить {cache_name}: {e}")
+            self._logger.info("Очистка кэша профиля Chrome завершена")
+
     def start(self, headless: bool | None = None) -> None:
-        """Запускает Chrome: завершает stale-процессы, создаёт driver.
+        """Запускает Chrome: завершает stale-процессы, чистит кэш, создаёт driver.
 
         Параметр headless перекрывает конфиг — login() передаёт False для 2FA.
         """
         if self._driver is not None:
             return
         self._kill_stale_chrome()
+        self._cleanup_profile_cache()
         self._driver = self._create_driver(headless=headless)
         self._logger.info("Браузер запущен")
 
