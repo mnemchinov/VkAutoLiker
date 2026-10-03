@@ -5,7 +5,7 @@ auto_friends → auto_groups. Каждый следующий источник �
 если предыдущие не набрали enough постов.
 
 Внутри каждого источника посты шафлятся (random.shuffle) перед добавлением.
-Фильтрация: PostFilter (days_back + пустой текст + стоп-слова) + StateStore (is_processed).
+Фильтрация: FilterChain (days_back + пустой текст + стоп-слова) + StateStore (is_processed).
 """
 
 import random
@@ -15,7 +15,7 @@ from config import AppConfig
 from logger import AppLogger
 from pipeline import PipelineContext
 from post import Post
-from post_filter import PostFilter
+from post_filter import FilterChain
 from state_store import StateStore
 from vk_api_client import VKApiError
 
@@ -33,7 +33,7 @@ class CollectStage:
         search_service: ApiSearchService,
         config: AppConfig,
         state_store: StateStore,
-        post_filter: PostFilter,
+        post_filter: FilterChain,
         logger: AppLogger,
     ):
         """Инициализирует стадию сбора с сервисами и конфигурацией."""

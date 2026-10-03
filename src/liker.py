@@ -16,7 +16,7 @@ from config import AppConfig
 from logger import AppLogger
 from pipeline import Pipeline, PipelineContext
 from post import Post
-from post_filter import PostFilter
+from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from stage_collect import CollectStage
 from stage_dedup import DedupStage
 from state_store import StateStore
@@ -41,11 +41,19 @@ class AutoLiker:
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._state = StateStore(config, logger)
-        self._filter = PostFilter(config, logger)
-        self._pipeline = Pipeline([
+        self._filter = FilterChain([
+            DateFilter(config.search.days_back),
+            EmptyTextFilter(),
+            StopWordsFilter(config, logger),
+        ])
+        stages: list = [
             CollectStage(self._search_service, config, self._state, self._filter, logger),
             DedupStage(),
-        ])
+        ]
+        if config.search.filter_mode == "llm":
+            from stage_llm_filter import LLMFilterStage
+            stages.append(LLMFilterStage(config, logger))
+        self._pipeline = Pipeline(stages)
 
     def login(self) -> None:
         """Открывает браузер для ручного логина в VK (включая 2FA)."""

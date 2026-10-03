@@ -32,6 +32,16 @@ search:
   days_back: 30 # не лайкать посты старше N дней
   stop_words: [] # стоп-слова inline (дополнительные к файлу)
   stop_words_file: "stop_words.txt" # файл стоп-слов: одно слово на строку, '#' — комментарий
+  filter_mode: "stop_words" # "stop_words" (по словарю) или "llm" (через LLM-классификацию)
+
+# LLM-фильтр тематики постов (litellm). Работает только при filter_mode: "llm"
+llm:
+  model: "" # идентификатор модели в формате litellm, напр. "openai/gpt-4o-mini"
+  api_base: "" # базовый URL API провайдера (пусто = дефолт litellm)
+  api_key: "" # ключ API провайдера
+  system_prompt: "" # системный промпт (пусто = дефолтный промпт в src/post_filter.py)
+  timeout: 10 # таймаут запроса к LLM, сек
+  max_text_length: 500 # макс. длина текста поста, отправляемого в LLM
 
 # Лимиты и задержки (все рандомизируются через random.uniform)
 limits:

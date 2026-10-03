@@ -1,28 +1,69 @@
-"""Фильтрация постов по давности, наличию текста и стоп-словам.
+"""Фильтрация постов: протокол, отдельные фильтры и композит FilterChain.
 
-Фильтр проверяет только свойства поста (дата, текст) — без обращения к StateStore.
-Проверка is_processed выполняется в CollectStage, где она нужна для раннего выхода.
+Каждый фильтр реализует PostFilterProtocol.should_skip(post) -> bool:
+True — отсеять пост, False — оставить.
+
+FilterChain объединяет фильтры и применяется в CollectStage._accept().
+Быстрые фильтры (date, empty, stop_words) работают inline при сборе,
+сохраняя ранний выход (enough = target_likes * 2).
 
 Стоп-слова загружаются из двух источников:
   1. stop_words_file — внешний текстовый файл (одно слово на строку, '#' — комментарий)
   2. stop_words — inline-список из config.yaml
 Списки объединяются. Если файл не найден — предупреждение в лог, используется только inline.
+
+LLMTopicFilter также живёт здесь (реализует PostFilterProtocol), но НЕ входит
+в FilterChain — вызывается через LLMFilterStage после DedupStage (стоимость вызова).
 """
 
 import time
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
-from config import AppConfig
+import litellm
+
+from config import AppConfig, LLMConfig
 from logger import AppLogger
 from post import Post
 
 
-class PostFilter:
-    """Отсеивает посты старше days_back дней, без текста или со стоп-словами."""
+@runtime_checkable
+class PostFilterProtocol(Protocol):
+    """Интерфейс фильтра постов: True — отсеять, False — оставить."""
+
+    def should_skip(self, post: Post) -> bool: ...
+
+
+class DateFilter:
+    """Отсеивает посты старше days_back дней."""
+
+    def __init__(self, days_back: int):
+        """Инициализирует фильтр по давности."""
+        self._days_back = days_back
+
+    def should_skip(self, post: Post) -> bool:
+        """True, если пост старше days_back дней."""
+        cutoff = int(time.time()) - (self._days_back * 86400)
+        return post.date < cutoff
+
+
+class EmptyTextFilter:
+    """Отсеивает посты с пустым текстом."""
+
+    def should_skip(self, post: Post) -> bool:
+        """True, если текст поста пустой или состоит из пробелов."""
+        return not post.text.strip()
+
+
+class StopWordsFilter:
+    """Отсеивает посты, содержащие стоп-слова (регистронезависимо).
+
+    Стоп-слова загружаются из файла (stop_words_file) и inline-списка (stop_words).
+    Объединяются в один set. Если файл не найден — warning, используется только inline.
+    """
 
     def __init__(self, config: AppConfig, logger: AppLogger):
-        """Инициализирует фильтр: days_back + стоп-слова из файла и config.yaml."""
-        self._days_back = config.search.days_back
+        """Инициализирует фильтр стоп-слов из файла и config.yaml."""
         self._logger = logger
 
         file_words = self._load_stop_words_file(config.search.stop_words_file)
@@ -53,25 +94,86 @@ class PostFilter:
         self._logger.info(f"Загружено {len(words)} стоп-слов из {path}")
         return words
 
+    def should_skip(self, post: Post) -> bool:
+        """True, если текст поста содержит любое стоп-слово."""
+        if not self._stop_words:
+            return False
+        return any(w in post.text.lower() for w in self._stop_words)
+
+
+class FilterChain:
+    """Композит: прогоняет пост через список фильтров.
+
+    Пост отсеивается, если хотя бы один фильтр вернул should_skip == True.
+    Порядок фильтров важен для производительности: быстрые проверки (date,
+    empty) идут раньше тяжёлых (stop_words, LLM).
+    """
+
+    def __init__(self, filters: list[PostFilterProtocol]):
+        """Инициализирует цепочку фильтров."""
+        self._filters = filters
+
     def filter(self, posts: list[Post]) -> list[Post]:
-        """Возвращает только свежие посты с непустым текстом."""
-        cutoff = int(time.time()) - (self._days_back * 86400)
-        result: list[Post] = []
+        """Возвращает посты, прошедшие все фильтры."""
+        return [p for p in posts if not any(f.should_skip(p) for f in self._filters)]
 
-        for post in posts:
-            if post.date < cutoff:
-                continue
 
-            if not post.text.strip():
-                continue
+DEFAULT_SYSTEM_PROMPT = """Ты — модератор постов ВКонтакте. \
+Определи, подходит ли пост для автоматического лайка корпоративным аккаунтом.
 
-            if self._stop_words and any(
-                w in post.text.lower() for w in self._stop_words
-            ):
-                continue
+Отклоняй (ответ SKIP) посты на темы: политика, выборы, секс, порно, религия, \
+алкоголь, курение, наркотики, азартные игры, оружие, экстремизм, криптовалюта.
 
-            result.append(post)
+Разрешай (ответ OK) нейтральные посты: новости компании, продукция, акции, \
+повседневный контент, рецепты, лайфхаки, кухня, быт, спорт без политики.
 
-        removed = len(posts) - len(result)
-        self._logger.info(f"Фильтр: {len(posts)} → {len(result)} постов ({removed} отфильтровано)")
-        return result
+Ответь только одним словом: SKIP или OK."""
+
+
+class LLMTopicFilter:
+    """Фильтр тематики постов через LLM (litellm.completion).
+
+    Реализует PostFilterProtocol, но НЕ включается в FilterChain —
+    вызывается только через LLMFilterStage после DedupStage,
+    чтобы LLM работал с дедуплицированным списком (~40 постов, не 100+).
+
+    should_skip возвращает True, если LLM ответил SKIP.
+    При любой ошибке — False (не отсеивать, безопаснее оставить).
+    """
+
+    def __init__(self, config: LLMConfig, logger: AppLogger):
+        """Инициализирует LLM-фильтр с параметрами из конфигурации."""
+        self._config = config
+        self._logger = logger
+        self._system_prompt = config.system_prompt or DEFAULT_SYSTEM_PROMPT
+
+    def should_skip(self, post: Post) -> bool:
+        """True, если LLM определил пост как нежелательный (SKIP).
+
+        При ошибке LLM — False (не отсеивать). Текст обрезается до max_text_length.
+        """
+        text = post.text.strip()[: self._config.max_text_length]
+        if not text:
+            return False
+
+        try:
+            response = litellm.completion(
+                model=self._config.model,
+                messages=[
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": text},
+                ],
+                api_base=self._config.api_base or None,
+                api_key=self._config.api_key or None,
+                timeout=self._config.timeout,
+                temperature=0,
+                max_tokens=1,
+            )
+            answer = response.choices[0].message.content.strip().upper()
+            skip = "SKIP" in answer
+            if skip:
+                self._logger.debug(f"LLM отсеял пост {post.owner_id}_{post.item_id}: {text[:50]}")
+            return skip
+        except Exception as e:
+            self._logger.warning(f"Ошибка LLM для поста {post.owner_id}_{post.item_id}: {e}")
+            return False

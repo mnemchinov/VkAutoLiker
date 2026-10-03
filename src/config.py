@@ -66,6 +66,27 @@ class SearchConfig:
     days_back: int = 30
     stop_words: list[str] = field(default_factory=list)
     stop_words_file: str = ""
+    filter_mode: str = "stop_words"
+
+
+@dataclass
+class LLMConfig:
+    """Параметры LLM-фильтра тематики постов через litellm.
+
+    model — идентификатор модели в формате litellm (например "openai/gpt-4o-mini").
+    api_base — базовый URL API провайдера (пустая строка = дефолт litellm).
+    api_key — ключ API провайдера.
+    system_prompt — системный промпт для классификации (пустая строка = дефолтный).
+    timeout — таймаут запроса к LLM в секундах.
+    max_text_length — макс. длина текста поста, отправляемого в LLM.
+    """
+
+    model: str = ""
+    api_base: str = ""
+    api_key: str = ""
+    system_prompt: str = ""
+    timeout: int = 10
+    max_text_length: int = 500
 
 
 @dataclass
@@ -111,6 +132,7 @@ class AppConfig:
     limits: LimitsConfig
     logging: LoggingConfig
     state: StateConfig
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 
 class ConfigLoader:
@@ -138,6 +160,7 @@ class ConfigLoader:
         limits_raw = raw.get("limits", {})
         logging_raw = raw.get("logging", {})
         state_raw = raw.get("state", {})
+        llm_raw = raw.get("llm", {})
 
         self._config = AppConfig(
             api=ApiConfig(
@@ -167,6 +190,7 @@ class ConfigLoader:
                 days_back=search_raw.get("days_back", 30),
                 stop_words=search_raw.get("stop_words", []),
                 stop_words_file=search_raw.get("stop_words_file", ""),
+                filter_mode=search_raw.get("filter_mode", "stop_words"),
             ),
             limits=LimitsConfig(
                 likes_per_session_min=limits_raw.get("likes_per_session_min", 20),
@@ -184,6 +208,14 @@ class ConfigLoader:
             ),
             state=StateConfig(
                 db_path=state_raw.get("db_path", "vk_autoliker.db"),
+            ),
+            llm=LLMConfig(
+                model=llm_raw.get("model", ""),
+                api_base=llm_raw.get("api_base", ""),
+                api_key=llm_raw.get("api_key", ""),
+                system_prompt=llm_raw.get("system_prompt", ""),
+                timeout=llm_raw.get("timeout", 10),
+                max_text_length=llm_raw.get("max_text_length", 500),
             ),
         )
 
@@ -218,6 +250,12 @@ class ConfigLoader:
             raise ValueError(
                 "auto_friends/auto_groups включены, но user_id не задан (должен быть > 0)"
             )
+        if config.search.filter_mode not in ("stop_words", "llm"):
+            raise ValueError(
+                f"filter_mode должен быть 'stop_words' или 'llm', получено '{config.search.filter_mode}'"
+            )
+        if config.search.filter_mode == "llm" and not config.llm.model:
+            raise ValueError("filter_mode='llm', но llm.model не задан")
 
     @property
     def config(self) -> AppConfig:
