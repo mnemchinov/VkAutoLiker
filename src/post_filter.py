@@ -9,7 +9,7 @@ FilterChain объединяет фильтры и применяется в Col
 
 Стоп-слова загружаются из двух источников:
   1. stop_words_file — внешний текстовый файл (одно слово на строку, '#' — комментарий)
-  2. stop_words — inline-список из config.yaml
+  2. stop_words — inline-список из Settings
 Списки объединяются. Если файл не найден — предупреждение в лог, используется только inline.
 
 LLMTopicFilter также живёт здесь (реализует PostFilterProtocol), но НЕ входит
@@ -22,9 +22,9 @@ from typing import Protocol, runtime_checkable
 
 import litellm
 
-from config import AppConfig, LLMConfig
 from logger import AppLogger
 from post import Post
+from settings import Settings
 
 
 @runtime_checkable
@@ -62,12 +62,12 @@ class StopWordsFilter:
     Объединяются в один set. Если файл не найден — warning, используется только inline.
     """
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
-        """Инициализирует фильтр стоп-слов из файла и config.yaml."""
+    def __init__(self, config: Settings, logger: AppLogger):
+        """Инициализирует фильтр стоп-слов из файла и inline-списка Settings."""
         self._logger = logger
 
-        file_words = self._load_stop_words_file(config.search.stop_words_file)
-        inline_words = [w.lower() for w in config.search.stop_words]
+        file_words = self._load_stop_words_file(config.stop_words_file)
+        inline_words = [w.lower() for w in config.stop_words]
         self._stop_words = list(set(file_words + inline_words))
 
     def _load_stop_words_file(self, path: str) -> list[str]:
@@ -141,31 +141,31 @@ class LLMTopicFilter:
     При любой ошибке — False (не отсеивать, безопаснее оставить).
     """
 
-    def __init__(self, config: LLMConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует LLM-фильтр с параметрами из конфигурации."""
         self._config = config
         self._logger = logger
-        self._system_prompt = config.system_prompt or DEFAULT_SYSTEM_PROMPT
+        self._system_prompt = config.llm_system_prompt or DEFAULT_SYSTEM_PROMPT
 
     def should_skip(self, post: Post) -> bool:
         """True, если LLM определил пост как нежелательный (SKIP).
 
         При ошибке LLM — False (не отсеивать). Текст обрезается до max_text_length.
         """
-        text = post.text.strip()[: self._config.max_text_length]
+        text = post.text.strip()[: self._config.llm_max_text_length]
         if not text:
             return False
 
         try:
             response = litellm.completion(
-                model=self._config.model,
+                model=self._config.llm_model,
                 messages=[
                     {"role": "system", "content": self._system_prompt},
                     {"role": "user", "content": text},
                 ],
-                api_base=self._config.api_base or None,
-                api_key=self._config.api_key.get_secret_value() or None,
-                timeout=self._config.timeout,
+                api_base=self._config.llm_api_base or None,
+                api_key=self._config.llm_api_key.get_secret_value() or None,
+                timeout=self._config.llm_timeout,
                 temperature=0,
                 max_tokens=1,
             )

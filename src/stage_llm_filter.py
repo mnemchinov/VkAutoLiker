@@ -11,10 +11,10 @@ LLMFilterStage размещается ПОСЛЕ DedupStage, чтобы:
 Ban-risk: нулевой — запросы идут к провайдеру LLM, не к VK.
 """
 
-from config import AppConfig
 from logger import AppLogger
 from pipeline import PipelineContext
 from post_filter import LLMTopicFilter
+from settings import Settings
 
 
 class LLMFilterStage:
@@ -23,9 +23,9 @@ class LLMFilterStage:
     Размещается после DedupStage, чтобы LLM работал с дедуплицированным списком.
     """
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует стадию с LLMTopicFilter."""
-        self._filter = LLMTopicFilter(config.llm, logger)
+        self._filter = LLMTopicFilter(config, logger)
         self._logger = logger
 
     def process(self, ctx: PipelineContext) -> PipelineContext:

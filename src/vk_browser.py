@@ -16,8 +16,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from config import AppConfig
 from logger import AppLogger
+from settings import Settings
 
 
 class VKBrowser:
@@ -28,10 +28,10 @@ class VKBrowser:
     Все задержки — random.uniform, фиксированных нет.
     """
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует браузер с путём профиля и режимом headless из конфигурации."""
-        self._profile_path = config.browser.profile_path
-        self._headless = config.browser.headless
+        self._profile_path = config.profile_path
+        self._headless = config.headless
         self._logger = logger
         self._driver: WebDriver | None = None
 

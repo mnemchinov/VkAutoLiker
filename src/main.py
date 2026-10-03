@@ -9,9 +9,9 @@ from typing import TextIO
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import load_config
 from liker import AutoLiker
 from logger import AppLogger
+from settings import get_settings
 
 # Файл-блокировка: предотвращает двойной запуск (launchd может стартовать 2 процесса)
 _LOCK_FILE = Path(__file__).parent / ".autoliker.lock"
@@ -36,7 +36,6 @@ def _acquire_lock() -> TextIO:
 def main() -> None:
     """Точка входа CLI: парсит аргументы, создаёт AutoLiker, выполняет команду."""
     parser = argparse.ArgumentParser(description="VkAutoLiker — автолайкер ВКонтакте")
-    parser.add_argument("--config", default="config.yaml", help="Путь к файлу конфигурации")
     subparsers = parser.add_subparsers(dest="command", help="Доступные команды")
 
     subparsers.add_parser("login", help="Открыть браузер для ручного входа в VK (включая 2FA)")
@@ -58,7 +57,7 @@ def main() -> None:
 
     liker: AutoLiker | None = None
     try:
-        config = load_config(args.config)
+        config = get_settings()
         logger = AppLogger(config)
         liker = AutoLiker(config, logger)
 

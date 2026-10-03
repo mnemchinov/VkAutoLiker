@@ -4,8 +4,8 @@ import sqlite3
 import time
 from datetime import date
 
-from config import AppConfig
 from logger import AppLogger
+from settings import Settings
 
 
 class StateStore:
@@ -18,9 +18,9 @@ class StateStore:
       is_auto=0 — ручной запуск через --no-limit (не учитывается в дневном лимите).
     """
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует SQLite-подключение и создаёт таблицы."""
-        self._db_path = config.state.db_path
+        self._db_path = config.db_path
         self._logger = logger
         self._conn: sqlite3.Connection = sqlite3.connect(self._db_path)
         self._init_db()

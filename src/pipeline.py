@@ -8,8 +8,8 @@ Pipeline прогоняет контекст через стадии по пор
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from config import AppConfig
 from post import Post
+from settings import Settings
 
 
 @dataclass
@@ -22,7 +22,7 @@ class PipelineContext:
     используется CollectStage для раннего выхода (enough = target_likes * 2).
     """
 
-    config: AppConfig
+    config: Settings
     target_likes: int = 0
     posts: list[Post] = field(default_factory=list)
 

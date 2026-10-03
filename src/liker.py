@@ -12,11 +12,11 @@ from selenium.common.exceptions import InvalidSessionIdException, WebDriverExcep
 
 from api_search import ApiSearchService
 from browser_likes import BrowserLikesService, LikeResult
-from config import AppConfig
 from logger import AppLogger
 from pipeline import Pipeline, PipelineContext
 from post import Post
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
+from settings import Settings
 from stage_collect import CollectStage
 from stage_dedup import DedupStage
 from state_store import StateStore
@@ -31,7 +31,7 @@ class AutoLiker:
     Зависимости создаются в конструкторе (DI через config + logger).
     """
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Создает все сервисы (DI через config + logger): API-клиент, поиск, браузер, лайки, состояние."""
         self._config = config
         self._logger = logger
@@ -42,7 +42,7 @@ class AutoLiker:
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._state = StateStore(config, logger)
         self._filter = FilterChain([
-            DateFilter(config.search.days_back),
+            DateFilter(config.days_back),
             EmptyTextFilter(),
             StopWordsFilter(config, logger),
         ])
@@ -50,7 +50,7 @@ class AutoLiker:
             CollectStage(self._search_service, config, self._state, self._filter, logger),
             DedupStage(),
         ]
-        if config.search.filter_mode == "llm":
+        if config.filter_mode == "llm":
             from stage_llm_filter import LLMFilterStage
             stages.append(LLMFilterStage(config, logger))
         self._pipeline = Pipeline(stages)
@@ -72,13 +72,13 @@ class AutoLiker:
 
         self._logger.info("Проверка API-поиска...")
         posts: list[Post] = []
-        for query in self._config.search.queries[:1]:
+        for query in self._config.queries[:1]:
             posts = self._search_service.search(query, max_posts=3)
             if posts:
                 break
 
         if not posts:
-            for hashtag in self._config.search.hashtags[:1]:
+            for hashtag in self._config.hashtags[:1]:
                 posts = self._search_service.search_hashtag(hashtag, max_posts=3)
                 if posts:
                     break
@@ -129,9 +129,9 @@ class AutoLiker:
 
         if not no_limit:
             sessions_today, _likes_today = self._state.get_daily_stats()
-            if sessions_today >= self._config.limits.sessions_per_day:
+            if sessions_today >= self._config.sessions_per_day:
                 self._logger.info(
-                    f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.limits.sessions_per_day})"
+                    f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.sessions_per_day})"
                 )
                 return
 
@@ -142,8 +142,8 @@ class AutoLiker:
         likes_since_break = 0
         next_break_at = random.randint(5, 10)
         target = random.randint(
-            self._config.limits.likes_per_session_min,
-            self._config.limits.likes_per_session_max,
+            self._config.likes_per_session_min,
+            self._config.likes_per_session_max,
         )
 
         try:
@@ -162,9 +162,9 @@ class AutoLiker:
                     break
 
                 # Стоп-условие: серия капч — VK заподозрил автоматизацию
-                if captcha_streak >= self._config.limits.max_captcha_streak:
+                if captcha_streak >= self._config.max_captcha_streak:
                     self._logger.warning(
-                        f"Превышен лимит капч ({captcha_streak}/{self._config.limits.max_captcha_streak}) — остановка сессии"
+                        f"Превышен лимит капч ({captcha_streak}/{self._config.max_captcha_streak}) — остановка сессии"
                     )
                     break
 
@@ -195,7 +195,7 @@ class AutoLiker:
                         captcha_streak += 1
                         self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.warning(
-                            f"Капча ({captcha_streak}/{self._config.limits.max_captcha_streak}): {post.owner_id}_{post.item_id}"
+                            f"Капча ({captcha_streak}/{self._config.max_captcha_streak}): {post.owner_id}_{post.item_id}"
                         )
                     else:  # FAILED
                         self._state.mark_processed(post.owner_id, post.item_id)
@@ -218,7 +218,7 @@ class AutoLiker:
                     next_break_at = random.randint(5, 10)
                 else:
                     delay = random.uniform(
-                        self._config.limits.min_delay_sec, self._config.limits.max_delay_sec
+                        self._config.min_delay_sec, self._config.max_delay_sec
                     )
                     self._logger.info(f"Пауза {delay:.1f} сек перед следующим постом...")
                     time.sleep(delay)
@@ -246,7 +246,7 @@ class AutoLiker:
         auto_today, auto_likes_today = self._state.get_daily_stats()
         manual_sessions, manual_likes = self._state.get_manual_stats()
         self._logger.info(
-            f"Статус: авто сегодня={auto_today}/{self._config.limits.sessions_per_day} "
+            f"Статус: авто сегодня={auto_today}/{self._config.sessions_per_day} "
             f"сессий/{auto_likes_today} лайков, "
             f"ручных={manual_sessions} сессий/{manual_likes} лайков, "
             f"всего={total_sessions} сессий/{total_likes} лайков"

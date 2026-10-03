@@ -4,8 +4,8 @@ import time
 
 import requests
 
-from config import AppConfig
 from logger import AppLogger
+from settings import Settings
 
 
 class VKApiError(Exception):
@@ -39,11 +39,11 @@ class VKApiClient:
     _MAX_NETWORK_RETRIES = 3
     _NETWORK_RETRY_DELAY = 5.0
 
-    def __init__(self, config: AppConfig, logger: AppLogger):
+    def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует клиент с service-токеном и параметрами rate-лимита."""
-        self._token = config.api.service_token.get_secret_value()
-        self._api_version = config.api.api_version
-        self._base_url = config.api.base_url
+        self._token = config.service_token.get_secret_value()
+        self._api_version = config.api_version
+        self._base_url = config.base_url
         self._logger = logger
         self._last_call_time: float = 0.0
         self._min_interval: float = 0.34  # ~3 req/sec

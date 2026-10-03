@@ -7,9 +7,9 @@ from typing import ClassVar
 
 from selenium.webdriver.common.action_chains import ActionChains
 
-from config import AppConfig
 from logger import AppLogger
 from post import build_post_url
+from settings import Settings
 from vk_browser import VKBrowser
 
 
@@ -50,7 +50,7 @@ class BrowserLikesService:
         'img[src*="captcha"]',
     ]
 
-    def __init__(self, browser: VKBrowser, config: AppConfig, logger: AppLogger):
+    def __init__(self, browser: VKBrowser, config: Settings, logger: AppLogger):
         """Инициализирует сервис лайков с браузером и конфигурацией."""
         self._browser = browser
         self._config = config
@@ -93,8 +93,8 @@ class BrowserLikesService:
             return LikeResult.CAPTCHA
 
         delay = random.uniform(
-            self._config.limits.view_delay_min_sec,
-            self._config.limits.view_delay_max_sec,
+            self._config.view_delay_min_sec,
+            self._config.view_delay_max_sec,
         )
 
         self._simulate_human_behavior()
@@ -155,8 +155,8 @@ class BrowserLikesService:
 
         if random.random() < 0.10:
             extra = random.uniform(
-                self._config.limits.view_delay_min_sec,
-                self._config.limits.view_delay_max_sec,
+                self._config.view_delay_min_sec,
+                self._config.view_delay_max_sec,
             )
             time.sleep(extra)
 

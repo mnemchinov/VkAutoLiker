@@ -2,15 +2,15 @@
 
 import logging
 
-from config import AppConfig
+from settings import Settings
 
 
 class AppLogger:
     """Обёртка над logging.Logger с консольным и файловым хендлерами."""
-    def __init__(self, config: AppConfig, name: str = "vk_autoliker"):
+    def __init__(self, config: Settings, name: str = "vk_autoliker"):
         """Инициализирует логгер с консольным и файловым хендлерами."""
         self._logger = logging.getLogger(name)
-        self._logger.setLevel(getattr(logging, config.logging.level.upper(), logging.INFO))
+        self._logger.setLevel(getattr(logging, config.log_level.upper(), logging.INFO))
         self._logger.propagate = False
 
         if self._logger.handlers:
@@ -25,7 +25,7 @@ class AppLogger:
         console_handler.setFormatter(formatter)
         self._logger.addHandler(console_handler)
 
-        file_handler = logging.FileHandler(config.logging.file, encoding="utf-8")
+        file_handler = logging.FileHandler(config.log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
         self._logger.addHandler(file_handler)
 
