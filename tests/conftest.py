@@ -82,10 +82,11 @@ def mock_config_file(tmp_path, mock_config_data):
 
 
 @pytest.fixture
-def mock_config(mock_config_file):
-    from config import ConfigLoader
-    loader = ConfigLoader(mock_config_file)
-    return loader.load()
+def mock_config(mock_config_file, monkeypatch):
+    from config import load_config
+    monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+    monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+    return load_config(mock_config_file, _env_file=None)
 
 
 @pytest.fixture
