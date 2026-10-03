@@ -107,6 +107,23 @@ class TestCollectStage:
         assert (1, 1) in result_ids
         assert (1, 3) in result_ids
 
+    def test_own_posts_filtered(self, collect_stage, mock_config):
+        """Посты, где from_id == user_id, исключаются — лайкать свои посты не нужно."""
+        mock_config.queries = ["тест"]
+        own_post = _make_post(-111, 1, "свой пост")
+        own_post.from_id = mock_config.user_id
+        other_post = _make_post(-111, 2, "чужой пост")
+        other_post.from_id = 99999
+        collect_stage._search.search = MagicMock(return_value=[own_post, other_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        result_ids = [(p.owner_id, p.item_id) for p in result.posts]
+        assert (-111, 1) not in result_ids
+        assert (-111, 2) in result_ids
+
     def test_resolve_screen_name_none_skips_group(self, collect_stage, mock_config):
         """Если resolve_screen_name возвращает None — группа пропускается."""
         mock_config.queries = []

@@ -281,6 +281,10 @@ pytest -m "not browser and not live"    # базовая страховка по
     сборку, если задан. `llm_ssl_verify=False` (env `VK_LLM_SSL_VERIFY=false`) отключает
     проверку SSL через `litellm.client_session = httpx.Client(verify=False)` — для
     корпоративных endpoint'ов с CA, отсутствующим в `certifi`.
+22. **Фильтрация своих постов.** `Post.from_id` — автор поста (VK API `from_id`).
+    Парсится в `_parse_wall_item()` и `_parse_newsfeed_item()`.
+    `CollectStage._accept()` исключает посты где `from_id == config.user_id` —
+    лайкать собственные посты на стенах групп и друзей не нужно.
 
 ### Практики тестирования
 

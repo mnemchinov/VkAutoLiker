@@ -132,3 +132,43 @@ class TestApiSearchService:
         posts = svc.search("test", max_posts=1)
 
         assert posts[0].date == 1699999999
+
+    def test_parse_wall_item_from_id(self, mock_config, mock_logger):
+        """_parse_wall_item парсит from_id — автор поста."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -123,
+                    "id": 456,
+                    "text": "wall post",
+                    "date": 1700000000,
+                    "from_id": 999,
+                },
+            ]
+        }
+
+        svc = ApiSearchService(client, mock_logger)
+        posts = svc.get_wall_posts(-123, max_posts=1)
+
+        assert posts[0].from_id == 999
+
+    def test_parse_newsfeed_item_from_id(self, mock_config, mock_logger):
+        """_parse_newsfeed_item парсит from_id — автор поста."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -1,
+                    "id": 1,
+                    "text": "search post",
+                    "date": 1700000000,
+                    "from_id": 888,
+                },
+            ]
+        }
+
+        svc = ApiSearchService(client, mock_logger)
+        posts = svc.search("test", max_posts=1)
+
+        assert posts[0].from_id == 888

@@ -185,6 +185,7 @@ class ApiSearchService:
             text=item.get("text", ""),
             date=item.get("date", 0),
             url=build_post_url(owner_id, item_id),
+            from_id=item.get("from_id", 0),
         )
 
     @staticmethod
@@ -200,4 +201,5 @@ class ApiSearchService:
             text=item.get("text", ""),
             date=item.get("date", 0),
             url=build_post_url(owner_id, item_id),
+            from_id=item.get("from_id", 0),
         )

@@ -54,9 +54,14 @@ class CollectStage:
         enough = ctx.target_likes * 2
 
         def _accept(posts: list[Post]) -> None:
-            """Фильтрует (PostFilter + is_processed), шафлит, добавляет в all_posts."""
+            """Фильтрует (PostFilter + is_processed + свои посты), шафлит, добавляет в all_posts."""
             filtered = self._filter.filter(posts)
-            fresh = [p for p in filtered if not self._state.is_processed(p.owner_id, p.item_id)]
+            fresh = [
+                p
+                for p in filtered
+                if not self._state.is_processed(p.owner_id, p.item_id)
+                and p.from_id != self._config.user_id
+            ]
             random.shuffle(fresh)
             all_posts.extend(fresh)
 

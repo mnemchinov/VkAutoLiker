@@ -19,3 +19,4 @@ class Post:
     text: str
     date: int
     url: str = ""
+    from_id: int = 0
