@@ -63,7 +63,7 @@ pip install -r requirements.txt
 VK_SERVICE_TOKEN=ваш_service_токен
 VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: llm
 VK_USER_ID=12345678                     # ваш VK ID (числовой)
-VK_HASHTAGS=#вашХештег                  # comma-separated, хотя бы один источник
+VK_HASHTAGS=#вашХештег,#другойХештег    # comma-separated, хотя бы один источник
 VK_AUTO_FRIENDS=true                    # собирать посты со стен друзей
 VK_AUTO_GROUPS=true                     # собирать посты со стен подписок
 ```
@@ -134,60 +134,60 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 
 ### Источники и глубина сбора
 
-| Параметр | По умолч. | Пример | Описание |
-|---|---|---|---|
-| `user_id` | — | `12345678` | VK ID пользователя (для `friends.get` / `groups.get`) |
-| `queries` | `[]` | `["косметика", "распродажа"]` | Текстовые запросы через `newsfeed.search` |
-| `hashtags` | `[]` | `["#СоздаюСвойМагнит"]` | Хештеги через `newsfeed.search` |
-| `groups` | `[]` | `["magnet", "vkteam"]` | Короткие имена сообществ (`screen_name`) |
-| `accounts` | `[]` | `["durov"]` | Короткие имена пользователей (`screen_name`) |
-| `auto_friends` | `true` | — | Сбор постов со стен друзей |
-| `auto_groups` | `true` | — | Сбор постов со стен подписок |
-| `max_posts_per_query` | `100` | — | Лимит постов с одного текстового запроса |
-| `max_posts_per_hashtag` | `100` | — | Лимит постов с одного хештега (пагинация через `start_time`) |
-| `max_posts_per_group` | `100` | — | Лимит постов со стены одной группы |
-| `max_posts_per_account` | `100` | — | Лимит постов со стены одного пользователя |
-| `max_posts_per_friend` | `10` | — | Лимит постов со стены одного друга |
-| `max_friends_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
-| `max_groups_to_collect` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
-| `days_back` | `30` | — | Не лайкать посты старше N дней |
-| `stop_words` | `[]` | `["18+"]` | Стоп-слова inline (дополнительные к файлу) |
-| `stop_words_file` | `""` | `"stop_words.txt"` | Файл стоп-слов: одно слово на строку, `#` — комментарий |
-| `filter_mode` | `"stop_words"` | `"llm"` | Режим фильтрации: `"stop_words"` (по умолчанию) или `"llm"` (LLM-классификация) |
+| Параметр | Env var | По умолч. | Пример в `.env` | Описание |
+|---|---|---|---|---|
+| `user_id` | `VK_USER_ID` | `0` | `12345678` | VK ID пользователя (для `friends.get` / `groups.get`) |
+| `queries` | `VK_QUERIES` | `[]` | `косметика,распродажа` | Текстовые запросы через `newsfeed.search` (comma-separated) |
+| `hashtags` | `VK_HASHTAGS` | `[]` | `#СоздаюСвойМагнит,#яВыбираюМагнит` | Хештеги через `newsfeed.search` (comma-separated) |
+| `groups` | `VK_GROUPS` | `[]` | `magnet,vkteam` | Короткие имена сообществ `screen_name` (comma-separated) |
+| `accounts` | `VK_ACCOUNTS` | `[]` | `durov` | Короткие имена пользователей `screen_name` (comma-separated) |
+| `auto_friends` | `VK_AUTO_FRIENDS` | `false` | `true` | Сбор постов со стен друзей |
+| `auto_groups` | `VK_AUTO_GROUPS` | `false` | `true` | Сбор постов со стен подписок |
+| `max_posts_per_query` | `VK_MAX_POSTS_PER_QUERY` | `100` | — | Лимит постов с одного текстового запроса |
+| `max_posts_per_hashtag` | `VK_MAX_POSTS_PER_HASHTAG` | `100` | — | Лимит постов с одного хештега (пагинация через `start_time`) |
+| `max_posts_per_group` | `VK_MAX_POSTS_PER_GROUP` | `100` | — | Лимит постов со стены одной группы |
+| `max_posts_per_account` | `VK_MAX_POSTS_PER_ACCOUNT` | `100` | — | Лимит постов со стены одного пользователя |
+| `max_posts_per_friend` | `VK_MAX_POSTS_PER_FRIEND` | `10` | — | Лимит постов со стены одного друга |
+| `max_friends_to_collect` | `VK_MAX_FRIENDS_TO_COLLECT` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
+| `max_groups_to_collect` | `VK_MAX_GROUPS_TO_COLLECT` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
+| `days_back` | `VK_DAYS_BACK` | `30` | — | Не лайкать посты старше N дней |
+| `stop_words` | `VK_STOP_WORDS` | `[]` | `18+,казино` | Стоп-слова inline (дополнительные к файлу, comma-separated) |
+| `stop_words_file` | `VK_STOP_WORDS_FILE` | `""` | `stop_words.txt` | Файл стоп-слов: одно слово на строку, `#` — комментарий |
+| `filter_mode` | `VK_FILTER_MODE` | `"stop_words"` | `llm` | Режим фильтрации: `"stop_words"` или `"llm"` |
 
-### `limits` — лимиты и задержки
+### Лимиты и задержки
 
 Все задержки рандомизируются через `random.uniform(min, max)`.
 
-| Параметр | По умолч. | Описание |
-|---|---|---|
-| `likes_per_session_min` | `20` | Минимум лайков за сессию (`random.randint(min, max)`) |
-| `likes_per_session_max` | `30` | Максимум лайков за сессию |
-| `sessions_per_day` | `3` | Лимит сессий в день (только `is_auto=1`) |
-| `min_delay_sec` | `15` | Мин. пауза между лайками |
-| `max_delay_sec` | `60` | Макс. пауза между лайками |
-| `view_delay_min_sec` | `5` | Мин. пауза «чтения» поста перед лайком |
-| `view_delay_max_sec` | `15` | Макс. пауза «чтения» поста |
-| `max_captcha_streak` | `3` | Стоп после N капч подряд |
-
-### `logging` и `state`
-
-| Параметр | По умолч. | Описание |
-|---|---|---|
-| `logging.level` | `INFO` | Уровень логирования (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
-| `logging.file` | `vk_autoliker.log` | Файл логов |
-| `state.db_path` | `vk_autoliker.db` | Путь к SQLite-базе |
-
-### `llm` — параметры LLM-фильтрации (опционально, `filter_mode: "llm"`)
-
-| Параметр | По умолч. | Пример | Описание |
+| Параметр | Env var | По умолч. | Описание |
 |---|---|---|---|
-| `llm.model` | `"gpt-4o-mini"` | `"claude-3-haiku-20240307"` | Идентификатор модели (через litellm) |
-| `llm.api_base` | `""` | `"https://api.openai.com/v1"` | Базовый URL API (пусто = default провайдера) |
-| `llm.api_key` | `""` | `"sk-..."` | API-ключ провайдера (НЕ коммитить в git) |
-| `llm.system_prompt` | (встроенный промпт) | — | Системный промпт для классификации тематики |
-| `llm.timeout` | `10` | `30` | Таймаут запроса к LLM (сек) |
-| `llm.max_text_length` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
+| `likes_per_session_min` | `VK_LIKES_PER_SESSION_MIN` | `20` | Минимум лайков за сессию (`random.randint(min, max)`) |
+| `likes_per_session_max` | `VK_LIKES_PER_SESSION_MAX` | `30` | Максимум лайков за сессию |
+| `sessions_per_day` | `VK_SESSIONS_PER_DAY` | `3` | Лимит сессий в день (только `is_auto=1`) |
+| `min_delay_sec` | `VK_MIN_DELAY_SEC` | `15` | Мин. пауза между лайками |
+| `max_delay_sec` | `VK_MAX_DELAY_SEC` | `60` | Макс. пауза между лайками |
+| `view_delay_min_sec` | `VK_VIEW_DELAY_MIN_SEC` | `5` | Мин. пауза «чтения» поста перед лайком |
+| `view_delay_max_sec` | `VK_VIEW_DELAY_MAX_SEC` | `15` | Макс. пауза «чтения» поста |
+| `max_captcha_streak` | `VK_MAX_CAPTCHA_STREAK` | `3` | Стоп после N капч подряд |
+
+### Логирование и состояние
+
+| Параметр | Env var | По умолч. | Описание |
+|---|---|---|---|
+| `log_level` | `VK_LOG_LEVEL` | `INFO` | Уровень логирования (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
+| `log_file` | `VK_LOG_FILE` | `vk_autoliker.log` | Файл логов |
+| `db_path` | `VK_DB_PATH` | `vk_autoliker.db` | Путь к SQLite-базе |
+
+### LLM-фильтрация (опционально, `filter_mode: "llm"`)
+
+| Параметр | Env var | По умолч. | Пример в `.env` | Описание |
+|---|---|---|---|---|
+| `llm_model` | `VK_LLM_MODEL` | `""` | `gpt-4o-mini` | Идентификатор модели (через litellm) |
+| `llm_api_base` | `VK_LLM_API_BASE` | `""` | `https://api.openai.com/v1` | Базовый URL API (пусто = default провайдера) |
+| `llm_api_key` | `VK_LLM_API_KEY` | `""` | `sk-...` | API-ключ провайдера (`SecretStr`, НЕ коммитить) |
+| `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт для классификации тематики |
+| `llm_timeout` | `VK_LLM_TIMEOUT` | `10` | `30` | Таймаут запроса к LLM (сек) |
+| `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
 
 ## Источники постов
 
@@ -324,7 +324,7 @@ vk_autoliker.db        — SQLite база (в .gitignore)
 ## Тесты
 
 ```bash
-pytest                                  # 110 passed, 3 deselected (live-тесты пропускаются)
+pytest                                  # 116 passed, 3 deselected (live-тесты пропускаются)
 pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
 pytest -m browser                       # тесты с реальным Chrome (HTML-фикстура)
 pytest -m live                          # e2e на живом посте VK (нужен --vk-post=URL)
@@ -332,7 +332,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 ```
 
 Три уровня:
-1. **Mock WebDriver** (74 теста) — быстрые юнит-тесты, без браузера и сети
+1. **Mock WebDriver** (116 тестов) — быстрые юнит-тесты, без браузера и сети
 2. **HTML-фикстура** (1 тест, маркер `browser`) — локальный `http.server` + headless Chrome против `vk_post.html`
 3. **Live** (2 теста, маркер `live`) — e2e на реальном посте VK; `pytest.skip` по умолчанию, запускаются только вручную после `login`
 
