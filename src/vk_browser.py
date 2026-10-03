@@ -108,7 +108,7 @@ class VKBrowser:
         return self._driver
 
     def _kill_stale_chrome(self) -> None:
-        """Завершает процессы Chrome, использующие этот профиль — иначе SessionNotCreatedException."""
+        """Завершает процессы Chrome и удаляет lock-файлы профиля — иначе SessionNotCreatedException."""
         try:
             result = subprocess.run(
                 ["pgrep", "-f", self._profile_path],
@@ -125,6 +125,14 @@ class VKBrowser:
                 self._logger.info(f"Завершены процессы Chrome ({len(pids)}): {pids}")
         except Exception as e:
             self._logger.debug(f"Ошибка cleanup Chrome: {e}")
+
+        for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+            lock = Path(self._profile_path) / name
+            if lock.exists():
+                try:
+                    lock.unlink()
+                except OSError:
+                    pass
 
     def start(self, headless: bool | None = None) -> None:
         """Запускает Chrome: завершает stale-процессы, создаёт driver.

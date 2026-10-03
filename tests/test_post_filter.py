@@ -112,8 +112,50 @@ class TestStopWordsFilter:
         mock_config.stop_words_file = str(sw_file)
         f = StopWordsFilter(mock_config, mock_logger)
 
-        assert "политика" in f._stop_words
-        assert len(f._stop_words) == 1
+        assert "политика" in f._stop_lemmas
+        assert len(f._stop_lemmas) == 1
+
+    def test_lemmatization_matches_word_forms(self, mock_config, mock_logger):
+        """Лемматизация находит стоп-слово в любой форме («церковью» → «церковь»)."""
+        mock_config.stop_words = ["церковь"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.should_skip(make_post(1, 1, "зашёл в церковью")) is True
+        assert f.should_skip(make_post(1, 1, "у церкви")) is True
+        assert f.should_skip(make_post(1, 1, "около церковью")) is True
+
+    def test_substring_matches_non_russian(self, mock_config, mock_logger):
+        """Нерусские слова и аббревиатуры — substring-поиск («18+», «СВО»)."""
+        mock_config.stop_words = ["18+", "СВО", "vape"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.should_skip(make_post(1, 1, "контент 18+ только")) is True
+        assert f.should_skip(make_post(1, 1, "на СВО мобилизовали")) is True
+        assert f.should_skip(make_post(1, 1, "купил vape новый")) is True
+        assert f.should_skip(make_post(1, 1, "обычный пост")) is False
+
+    def test_multi_word_phrase_matches(self, mock_config, mock_logger):
+        """Многословные фразы — substring-поиск («игровые автоматы»)."""
+        mock_config.stop_words = ["игровые автоматы"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.should_skip(make_post(1, 1, "зашёл в игровые автоматы")) is True
+        assert f.should_skip(make_post(1, 1, "игровые автоматы выиграл")) is True
+        assert f.should_skip(make_post(1, 1, "обычный пост")) is False
+
+    def test_lemmatization_no_false_positive(self, mock_config, mock_logger):
+        """Слово с другой леммой не вызывает ложного срабатывания."""
+        mock_config.stop_words = ["политика"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        # «политический» — прилагательное, лемма «политический» ≠ «политика»
+        assert f.should_skip(make_post(1, 1, "политический анализ")) is False
+        # «политику» — винительный падеж, лемма «политика» — совпадает
+        assert f.should_skip(make_post(1, 1, "обсуждаем политику")) is True
 
 
 class TestFilterChain:

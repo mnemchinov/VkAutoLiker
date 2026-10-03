@@ -16,12 +16,14 @@ LLMTopicFilter также живёт здесь (реализует PostFilterPr
 в FilterChain — вызывается через LLMFilterStage после DedupStage (стоимость вызова).
 """
 
+import re
 import time
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import httpx
 import litellm
+from pymorphy3 import MorphAnalyzer
 
 from logger import AppLogger
 from post import Post
@@ -60,8 +62,25 @@ class StopWordsFilter:
     """Отсеивает посты, содержащие стоп-слова (регистронезависимо).
 
     Стоп-слова загружаются из файла (stop_words_file) и inline-списка (stop_words).
-    Объединяются в один set. Если файл не найден — warning, используется только inline.
+    Объединяются и разделяются на три группы:
+
+      1. _stop_lemmas — леммы русских слов (pymorphy3: «церковью» → «церковь»).
+         Текст поста лемматизируется, леммы сравниваются с этим множеством.
+      2. _stop_substrings — нерусские слова и аббревиатуры (18+, xxx, СВО, mlm) —
+         substring-поиск, лемматизация неприменима.
+      3. _stop_phrases — многословные фразы («игровые автоматы») — substring-поиск.
+
+    MorphAnalyzer — class-level singleton: словарь (~5MB) грузится один раз.
     """
+
+    _morph: MorphAnalyzer | None = None
+
+    @classmethod
+    def _get_morph(cls) -> MorphAnalyzer:
+        """Возвращает class-level singleton MorphAnalyzer (словарь грузится один раз)."""
+        if cls._morph is None:
+            cls._morph = MorphAnalyzer()
+        return cls._morph
 
     def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует фильтр стоп-слов из файла и inline-списка Settings."""
@@ -69,7 +88,21 @@ class StopWordsFilter:
 
         file_words = self._load_stop_words_file(config.stop_words_file)
         inline_words = [w.lower() for w in config.stop_words]
-        self._stop_words = list(set(file_words + inline_words))
+        all_words = set(file_words + inline_words)
+
+        self._stop_lemmas: set[str] = set()
+        self._stop_substrings: set[str] = set()
+        self._stop_phrases: set[str] = set()
+
+        morph = self._get_morph()
+        for word in all_words:
+            if " " in word:
+                self._stop_phrases.add(word)
+            elif re.fullmatch(r"[а-яё]+", word):
+                parse = morph.parse(word)[0]
+                self._stop_lemmas.add(parse.normal_form)
+            else:
+                self._stop_substrings.add(word)
 
     def _load_stop_words_file(self, path: str) -> list[str]:
         """Загружает стоп-слова из текстового файла.
@@ -96,10 +129,43 @@ class StopWordsFilter:
         return words
 
     def should_skip(self, post: Post) -> bool:
-        """True, если текст поста содержит любое стоп-слово."""
-        if not self._stop_words:
+        """True, если текст поста содержит любое стоп-слово.
+
+        Сначала проверяются substring-группы (быстро), затем лемматизация.
+        Каждый результат логируется на INFO — по аналогии с LLM-фильтром.
+        """
+        post_id = f"{post.owner_id}_{post.item_id}"
+
+        if not self._stop_lemmas and not self._stop_substrings and not self._stop_phrases:
+            self._logger.info(f"Стоп-слова: пост {post_id} → OK (словарь пуст)")
             return False
-        return any(w in post.text.lower() for w in self._stop_words)
+
+        text_lower = post.text.lower()
+
+        for s in self._stop_substrings:
+            if s in text_lower:
+                self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{s}' (substring)")
+                return True
+        for p in self._stop_phrases:
+            if p in text_lower:
+                self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{p}' (фраза)")
+                return True
+
+        if not self._stop_lemmas:
+            self._logger.info(f"Стоп-слова: пост {post_id} → OK")
+            return False
+
+        morph = self._get_morph()
+        for token in re.findall(r"[а-яё]{3,}", text_lower):
+            lemma = morph.parse(token)[0].normal_form
+            if lemma in self._stop_lemmas:
+                self._logger.info(
+                    f"Стоп-слова: пост {post_id} → совпадение '{token}' → лемма '{lemma}'"
+                )
+                return True
+
+        self._logger.info(f"Стоп-слова: пост {post_id} → OK")
+        return False
 
 
 class FilterChain:
