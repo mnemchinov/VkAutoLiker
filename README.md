@@ -182,12 +182,43 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 
 | Параметр | Env var | По умолч. | Пример в `.env` | Описание |
 |---|---|---|---|---|
-| `llm_model` | `VK_LLM_MODEL` | `""` | `gpt-4o-mini` | Идентификатор модели (через litellm) |
+| `llm_model` | `VK_LLM_MODEL` | `""` | `openai/gpt-4o-mini` | Идентификатор модели (через litellm; префикс `openai/` обязателен — определяет протокол) |
 | `llm_api_base` | `VK_LLM_API_BASE` | `""` | `https://api.openai.com/v1` | Базовый URL API (пусто = default провайдера) |
-| `llm_api_key` | `VK_LLM_API_KEY` | `""` | `sk-...` | API-ключ провайдера (`SecretStr`, НЕ коммитить) |
-| `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт для классификации тематики |
+| `llm_api_key` | `VK_LLM_API_KEY` | `""` | `sk-...` | API-ключ провайдера (`SecretStr`, НЕ коммитить; для Ollama — любая непустая строка) |
+| `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт (переопределяет сборку из `llm_stop_topics`) |
+| `llm_stop_topics` | `VK_LLM_STOP_TOPICS` | (8 тем по умолчанию) | `политика,религия` | Стоп-темы для LLM (comma-separated; встроенный промпт, если `llm_system_prompt` пуст) |
 | `llm_timeout` | `VK_LLM_TIMEOUT` | `10` | `30` | Таймаут запроса к LLM (сек) |
+| `llm_max_tokens` | `VK_LLM_MAX_TOKENS` | `1000` | `5` | Лимит токенов в ответе LLM (reasoning-моделям нужен запас на размышление + ответ) |
 | `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
+| `llm_ssl_verify` | `VK_LLM_SSL_VERIFY` | `true` | `false` | Проверка SSL-сертификата LLM-endpoint (`false` — для корпоративных CA) |
+
+### Примеры конфигурации LLM-провайдеров
+
+**Ollama** (локальная модель, не требует API-ключа):
+
+```dotenv
+VK_LLM_MODEL=openai/ministral-3:8b-64k
+VK_LLM_API_BASE=http://localhost:11434/v1
+VK_LLM_API_KEY=ollama
+VK_LLM_SSL_VERIFY=true
+```
+
+**your-model-name** (корпоративный endpoint, reasoning-модель):
+
+```dotenv
+VK_LLM_MODEL=openai/your-model-name
+VK_LLM_API_BASE=https://your-endpoint/v1
+VK_LLM_API_KEY=sk-...
+VK_LLM_SSL_VERIFY=false
+```
+
+> **Префикс `openai/`** в `llm_model` обязателен — litellm по нему определяет
+> OpenAI-совместимый протокол. Без префикса litellm не найдёт провайдера.
+>
+> **Reasoning-модели** (your-model-name, o1, o3) тратят токены на `reasoning_content`
+> перед ответом: ~200+ токенов на размышление + ~2 на ответ «SKIP»/«OK». Если
+> `llm_max_tokens` слишком мал (5), все токены уйдут на reasoning, `content`
+> останется пустым. Дефолт `500` — запас для reasoning + ответ.
 
 ## Источники постов
 
