@@ -8,9 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipeline import PipelineContext
 from post import Post, build_post_url
-from stage_collect import CollectStage
+from stages import CollectStage, PipelineContext
 
 
 def _make_post(owner_id: int, item_id: int, text: str = "текст поста") -> Post:
@@ -128,7 +127,7 @@ class TestCollectStage:
 
     def test_vkapierror_on_wall_get_skips_source(self, collect_stage, mock_config):
         """VKApiError на get_wall_posts — источник пропускается, сбор продолжается."""
-        from vk_api_client import VKApiError
+        from api import VKApiError
 
         mock_config.queries = []
         mock_config.hashtags = []

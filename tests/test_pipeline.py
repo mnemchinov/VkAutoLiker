@@ -6,8 +6,8 @@ Pipeline прогоняет PipelineContext через стадии по пор�
 
 from unittest.mock import MagicMock
 
-from pipeline import Pipeline, PipelineContext
 from post import Post, build_post_url
+from stages import Pipeline, PipelineContext
 
 
 def _make_post(owner_id: int = 1, item_id: int = 1) -> Post:

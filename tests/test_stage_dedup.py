@@ -2,9 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from pipeline import PipelineContext
 from post import Post, build_post_url
-from stage_dedup import DedupStage
+from stages import DedupStage, PipelineContext
 
 
 def _make_post(owner_id: int, item_id: int) -> Post:

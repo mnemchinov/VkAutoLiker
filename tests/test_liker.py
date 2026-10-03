@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from browser_likes import LikeResult
-from pipeline import PipelineContext
+from browser import LikeResult
 from post import Post, build_post_url
+from stages import PipelineContext
 
 
 def _make_post(owner_id: int, item_id: int, text: str = "текст поста") -> Post:

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from browser_likes import BrowserLikesService, LikeResult
+from browser import BrowserLikesService, LikeResult
 
 LIKED_LABEL = "Убрать реакцию «Лайк»"
 NOT_LIKED_LABEL = "Отправить реакцию «Лайк»"

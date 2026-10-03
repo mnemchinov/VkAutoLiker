@@ -12,9 +12,10 @@ Ban-risk: нулевой — запросы идут к провайдеру LLM
 """
 
 from logger import AppLogger
-from pipeline import PipelineContext
 from post_filter import LLMTopicFilter
 from settings import Settings
+
+from .pipeline import PipelineContext
 
 
 class LLMFilterStage:

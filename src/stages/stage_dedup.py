@@ -4,7 +4,7 @@
 группы и в ленте новостей). Дедупликация сохраняет первое вхождение.
 """
 
-from pipeline import PipelineContext
+from .pipeline import PipelineContext
 
 
 class DedupStage:

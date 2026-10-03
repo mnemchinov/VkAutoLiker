@@ -3,7 +3,8 @@
 
 from logger import AppLogger
 from post import Post, build_post_url
-from vk_api_client import VKApiClient, VKApiError
+
+from .vk_api_client import VKApiClient, VKApiError
 
 
 class ApiSearchService:

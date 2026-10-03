@@ -6,8 +6,8 @@ litellm.completion мокается через patch — реальных зап
 import time
 from unittest.mock import MagicMock, patch
 
-from pipeline import PipelineContext
 from post import Post, build_post_url
+from stages import PipelineContext
 
 
 def _make_post(owner_id: int, item_id: int, text: str = "текст поста") -> Post:
@@ -152,7 +152,7 @@ class TestLLMFilterStage:
 
     def test_filters_skip_posts(self, mock_config, mock_logger):
         """Стадия отсеивает посты, где LLM ответил SKIP."""
-        from stage_llm_filter import LLMFilterStage
+        from stages import LLMFilterStage
 
         stage = LLMFilterStage(mock_config, mock_logger)
         posts = [
@@ -171,7 +171,7 @@ class TestLLMFilterStage:
 
     def test_keeps_all_on_exception(self, mock_config, mock_logger):
         """Ошибка LLM → все посты остаются (should_skip False)."""
-        from stage_llm_filter import LLMFilterStage
+        from stages import LLMFilterStage
 
         stage = LLMFilterStage(mock_config, mock_logger)
         posts = [_make_post(1, 1, "a"), _make_post(2, 2, "b")]
@@ -184,7 +184,7 @@ class TestLLMFilterStage:
 
     def test_empty_list_passes_through(self, mock_config, mock_logger):
         """Пустой список → стадия не вызывает LLM."""
-        from stage_llm_filter import LLMFilterStage
+        from stages import LLMFilterStage
 
         stage = LLMFilterStage(mock_config, mock_logger)
         ctx = PipelineContext(config=mock_config, posts=[])

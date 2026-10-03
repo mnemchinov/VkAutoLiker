@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from api_search import ApiSearchService
+from api import ApiSearchService
 from post import Post
 
 

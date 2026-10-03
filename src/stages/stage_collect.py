@@ -10,14 +10,14 @@ auto_friends → auto_groups. Каждый следующий источник �
 
 import random
 
-from api_search import ApiSearchService
+from api import ApiSearchService, VKApiError
 from logger import AppLogger
-from pipeline import PipelineContext
 from post import Post
 from post_filter import FilterChain
 from settings import Settings
 from state_store import StateStore
-from vk_api_client import VKApiError
+
+from .pipeline import PipelineContext
 
 
 class CollectStage:

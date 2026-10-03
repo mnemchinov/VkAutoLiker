@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from selenium.common.exceptions import WebDriverException
 
-from vk_browser import VKBrowser
+from browser import VKBrowser
 
 
 class TestVKBrowserIsLoggedIn:
@@ -54,7 +54,7 @@ class TestVKBrowserIsLoggedIn:
         browser._driver.get_cookies.return_value = [
             {"name": "remixsid", "value": "session_hash"},
         ]
-        with patch("vk_browser.time.sleep"):
+        with patch("browser.vk_browser.time.sleep"):
             assert browser.is_logged_in() is True
 
     def test_logged_in_network_error_exhausts_retries(self, mock_config, mock_logger):
@@ -62,5 +62,5 @@ class TestVKBrowserIsLoggedIn:
         browser = VKBrowser(mock_config, mock_logger)
         browser._driver = MagicMock()
         browser._driver.get.side_effect = WebDriverException("No internet")
-        with patch("vk_browser.time.sleep"):
+        with patch("browser.vk_browser.time.sleep"):
             assert browser.is_logged_in() is False

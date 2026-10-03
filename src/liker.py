@@ -10,18 +10,14 @@ import time
 
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
-from api_search import ApiSearchService
-from browser_likes import BrowserLikesService, LikeResult
+from api import ApiSearchService, CaptchaError, VKApiClient
+from browser import BrowserLikesService, LikeResult, VKBrowser
 from logger import AppLogger
-from pipeline import Pipeline, PipelineContext
 from post import Post
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from settings import Settings
-from stage_collect import CollectStage
-from stage_dedup import DedupStage
+from stages import CollectStage, DedupStage, Pipeline, PipelineContext
 from state_store import StateStore
-from vk_api_client import CaptchaError, VKApiClient
-from vk_browser import VKBrowser
 
 
 class AutoLiker:
@@ -53,7 +49,7 @@ class AutoLiker:
             DedupStage(),
         ]
         if config.filter_mode == "llm":
-            from stage_llm_filter import LLMFilterStage
+            from stages import LLMFilterStage
             stages.append(LLMFilterStage(config, logger))
         self._pipeline = Pipeline(stages)
 

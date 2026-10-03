@@ -10,7 +10,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from logger import AppLogger
 from post import build_post_url
 from settings import Settings
-from vk_browser import VKBrowser
+
+from .vk_browser import VKBrowser
 
 
 class LikeResult(Enum):
