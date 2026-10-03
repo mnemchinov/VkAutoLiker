@@ -223,11 +223,17 @@ pytest -m "not browser and not live"    # базовая страховка по
     `max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
     `wall.get` (не срез списка): достигнут → `break`. Каждая сессия работает со случайным
     подмножеством, а не с одними и теми же первыми N.
+    **Кэш закрытых стен:** перед `wall.get` проверяется `StateStore.is_wall_closed(owner_id)`;
+    при `VKApiError` стена помечается через `mark_wall_closed`. TTL — `closed_wall_ttl_days`
+    (дефолт 7, env `VK_CLOSED_WALL_TTL_DAYS`). Предотвращает ~38% пустых API-вызовов на закрытые стены друзей.
 11. **Источник лайков в приоритетном порядке:** queries → hashtags → groups → accounts →
     auto_friends → auto_groups. Каждый следующий источник собирается только если
     предыдущие не набрали `enough` постов. Финального перемешивания между источниками нет.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
-    использующие `chrome_profile/` (через `pgrep` + `SIGTERM`), иначе `SessionNotCreatedException`.
+    использующие `chrome_profile/` (через `pgrep` + `SIGTERM`), удаляет lock-файлы
+    (`SingletonLock`, `SingletonCookie`, `SingletonSocket`) и проверяет размер профиля:
+    при превышении `profile_max_size_mb` (дефолт 500) чистит кэш-подкаталоги
+    (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
 13. **Клик через ActionChains.** `click_element` использует `move_to_element + pause + click`
     (мышиная траектория), а не синтетический `element.click()`.
 14. **Капча-стоп.** `_detect_captcha()` в `browser_likes.py` проверяет CSS-селектор капчи;
@@ -255,8 +261,9 @@ pytest -m "not browser and not live"    # базовая страховка по
     находит «церковью», «церкви», «церковного». Три группы: `_stop_lemmas` (русские слова через
     лемматизацию), `_stop_substrings` (нерусские/аббревиатуры через substring), `_stop_phrases`
     (многословные фразы через substring). `MorphAnalyzer` — class-level singleton (словарь ~5MB грузится один раз).
-    Каждый результат `should_skip()` логируется на INFO (совпадение с указанием слова/леммы или OK) — по аналогии
-    с LLM-фильтром.
+    Каждый результат `should_skip()` логируется: совпадения — на INFO (с указанием слова/леммы),
+    OK — на DEBUG. В конце сбора `CollectStage` вызывает `FilterChain.log_summaries()` →
+    `StopWordsFilter.log_summary()` логирует сводку `Стоп-слова: проверено N, отсеяно M (X%)`.
 20. **LLM-фильтрация опциональна.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию)
     или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
     каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается

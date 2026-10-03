@@ -177,6 +177,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `log_level` | `VK_LOG_LEVEL` | `INFO` | Уровень логирования (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
 | `log_file` | `VK_LOG_FILE` | `vk_autoliker.log` | Файл логов |
 | `db_path` | `VK_DB_PATH` | `vk_autoliker.db` | Путь к SQLite-базе |
+| `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | TTL кэша закрытых стен (дней) |
+| `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш |
 
 ### LLM-фильтрация (опционально, `filter_mode: "llm"`)
 
