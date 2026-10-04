@@ -13,7 +13,7 @@ from selenium.common.exceptions import InvalidSessionIdException, WebDriverExcep
 from api import ApiSearchService, CaptchaError, VKApiClient
 from browser import BrowserLikesService, LikeResult, VKBrowser
 from logger import AppLogger
-from post import Post
+from post import Post, PostStatus
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from settings import Settings
 from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
@@ -37,19 +37,21 @@ class AutoLiker:
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._state = StateStore(config, logger)
-        filters: list = [
-            DateFilter(config.days_back),
-            EmptyTextFilter(),
-        ]
-        if config.filter_mode == "stop_words":
-            filters.append(StopWordsFilter(config, logger))
-        self._filter = FilterChain(filters)
+        structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
+        stop_words = StopWordsFilter(config, logger) if config.filter_mode == "stop_words" else None
         stages: list = [
-            CollectStage(self._search_service, config, self._state, self._filter, logger),
+            CollectStage(
+                self._search_service,
+                config,
+                self._state,
+                structural,
+                logger,
+                stop_words_filter=stop_words,
+            ),
             DedupStage(),
         ]
         if config.filter_mode == "llm":
-            stages.append(LLMFilterStage(config, logger))
+            stages.append(LLMFilterStage(config, logger, self._state))
         self._pipeline = Pipeline(stages)
 
     def login(self) -> None:
@@ -177,23 +179,21 @@ class AutoLiker:
                         likes_count += 1
                         likes_since_break += 1
                         captcha_streak = 0
-                        self._state.mark_processed(post.owner_id, post.item_id)
+                        self._state.mark_processed(post.owner_id, post.item_id, PostStatus.LIKED)
                         self._logger.info(f"Лайкнут ({likes_count}/{target})")
                     elif result == LikeResult.ALREADY_LIKED:
                         already_liked_count += 1
                         captcha_streak = 0
-                        self._state.mark_processed(post.owner_id, post.item_id)
+                        self._state.mark_processed(post.owner_id, post.item_id, PostStatus.LIKED)
                         skip_delay = random.uniform(2, 5)
                         time.sleep(skip_delay)
                         continue
                     elif result == LikeResult.CAPTCHA:
                         captcha_streak += 1
-                        self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.warning(
                             f"Капча ({captcha_streak}/{self._config.max_captcha_streak}): {post.owner_id}_{post.item_id}"
                         )
                     else:  # FAILED
-                        self._state.mark_processed(post.owner_id, post.item_id)
                         self._logger.warning(f"Лайк не удался: {post.owner_id}_{post.item_id}")
 
                 except (WebDriverException, InvalidSessionIdException) as e:
@@ -201,7 +201,6 @@ class AutoLiker:
                     break
                 except Exception as e:
                     self._logger.error(f"Ошибка обработки {post.owner_id}_{post.item_id}: {e}")
-                    self._state.mark_processed(post.owner_id, post.item_id)
                     continue
 
                 # Burst-смягчение: каждые 5-10 лайков — длинная пауза «отвлечения»

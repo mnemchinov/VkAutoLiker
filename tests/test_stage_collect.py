@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from post import Post, build_post_url
+from post import Post, PostStatus, build_post_url
 from stages import CollectStage, PipelineContext
 
 
@@ -30,10 +30,22 @@ def collect_stage(mock_config, mock_logger):
     state = MagicMock()
     state.is_processed = MagicMock(return_value=False)
     state.is_wall_closed = MagicMock(return_value=False)
-    post_filter = MagicMock()
-    post_filter.filter = lambda posts: list(posts)
+    state.mark_processed = MagicMock()
+    structural = MagicMock()
+    structural.should_skip = MagicMock(return_value=False)
+    structural.log_summaries = MagicMock()
+    stop_words = MagicMock()
+    stop_words.should_skip = MagicMock(return_value=False)
+    stop_words.log_summary = MagicMock()
 
-    return CollectStage(search, mock_config, state, post_filter, mock_logger)
+    return CollectStage(
+        search,
+        mock_config,
+        state,
+        structural,
+        mock_logger,
+        stop_words_filter=stop_words,
+    )
 
 
 class TestCollectStage:
@@ -106,6 +118,42 @@ class TestCollectStage:
         assert (1, 2) not in result_ids
         assert (1, 1) in result_ids
         assert (1, 3) in result_ids
+
+    def test_stop_words_marked_filtered(self, collect_stage, mock_config):
+        """Пост отсеян стоп-словами → mark_processed(FILTERED), не повторится."""
+        mock_config.queries = ["тест"]
+        good_post = _make_post(1, 1, "хороший пост")
+        bad_post = _make_post(1, 2, "пост про политика")
+        collect_stage._search.search = MagicMock(return_value=[good_post, bad_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._stop_words.should_skip = MagicMock(
+            side_effect=lambda p: "политика" in p.text
+        )
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        result_ids = [(p.owner_id, p.item_id) for p in result.posts]
+        assert (1, 1) in result_ids
+        assert (1, 2) not in result_ids
+        collect_stage._state.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
+
+    def test_structural_filter_not_marked(self, collect_stage, mock_config):
+        """Пост отсеян structural (дата/пустой текст) → БЕЗ mark_processed."""
+        mock_config.queries = ["тест"]
+        good_post = _make_post(1, 1, "хороший пост")
+        old_post = _make_post(1, 2, "старый пост")
+        collect_stage._search.search = MagicMock(return_value=[good_post, old_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._structural.should_skip = MagicMock(side_effect=lambda p: p.item_id == 2)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        result_ids = [(p.owner_id, p.item_id) for p in result.posts]
+        assert (1, 1) in result_ids
+        assert (1, 2) not in result_ids
+        collect_stage._state.mark_processed.assert_not_called()
 
     def test_own_posts_filtered(self, collect_stage, mock_config):
         """Посты, где from_id == user_id, исключаются — лайкать свои посты не нужно."""

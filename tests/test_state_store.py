@@ -1,3 +1,4 @@
+from post import PostStatus
 from state_store import StateStore
 
 
@@ -8,9 +9,37 @@ class TestStateStore:
         state = StateStore(config, mock_logger)
 
         assert not state.is_processed(1, 100)
-        state.mark_processed(1, 100)
+        state.mark_processed(1, 100, PostStatus.LIKED)
         assert state.is_processed(1, 100)
         assert not state.is_processed(1, 101)
+        state.close()
+
+    def test_mark_filtered_blocks_in_is_processed(self, mock_config, mock_logger, tmp_path):
+        """Пост отсеян (FILTERED) → is_processed True (не повторится)."""
+        config = mock_config
+        config.db_path = str(tmp_path / "test.db")
+        state = StateStore(config, mock_logger)
+
+        state.mark_processed(1, 100, PostStatus.FILTERED)
+        assert state.is_processed(1, 100)
+        state.close()
+
+    def test_mark_processed_default_is_liked(self, mock_config, mock_logger, tmp_path):
+        """mark_processed без status → LIKED (для цикла лайков)."""
+        import sqlite3
+
+        config = mock_config
+        config.db_path = str(tmp_path / "test.db")
+        state = StateStore(config, mock_logger)
+
+        state.mark_processed(1, 100)
+        conn = sqlite3.connect(config.db_path)
+        row = conn.execute(
+            "SELECT status FROM processed_posts WHERE owner_id=1 AND item_id=100"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == PostStatus.LIKED
         state.close()
 
     def test_session_lifecycle(self, mock_config, mock_logger, tmp_path):
@@ -79,6 +108,42 @@ class TestStateStore:
         # Старая сессия помечена is_auto=1 (DEFAULT 1)
         auto_today, _ = state.get_daily_stats()
         assert auto_today == 0  # старая сессия в другой дате, сегодня 0
+        state.close()
+
+    def test_migrate_adds_status_column(self, mock_config, mock_logger, tmp_path):
+        """Старая БД без колонки status мигрируется (DEFAULT 0 = UNKNOWN)."""
+        import sqlite3
+
+        db_path = str(tmp_path / "test.db")
+        # Создаём старую таблицу с liked_at, без status
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE processed_posts (
+                owner_id INTEGER NOT NULL,
+                item_id INTEGER NOT NULL,
+                liked_at INTEGER NOT NULL,
+                PRIMARY KEY (owner_id, item_id)
+            )
+        """)
+        conn.execute(
+            "INSERT INTO processed_posts (owner_id, item_id, liked_at) VALUES (1, 100, 12345)"
+        )
+        conn.commit()
+        conn.close()
+
+        config = mock_config
+        config.db_path = db_path
+        state = StateStore(config, mock_logger)
+
+        # Старая запись сохранилась, status=0 (UNKNOWN)
+        assert state.is_processed(1, 100)
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT status FROM processed_posts WHERE owner_id=1 AND item_id=100"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == PostStatus.UNKNOWN
         state.close()
 
     def test_multiple_sessions_daily(self, mock_config, mock_logger, tmp_path):

@@ -200,9 +200,15 @@ pytest -m "not browser and not live"    # базовая страховка по
 4. **Признак авторизации — cookie `remixsid`.** `VKBrowser.is_logged_in()` перед чтением
    cookies обязательно навигирует на `vk.ru` (Selenium отдаёт cookie только текущего домена).
 5. **Дедупликация по паре `(owner_id, item_id)`** — первичный ключ в `processed_posts`
-   и `INSERT OR IGNORE`. Пост помечается обработанным и при успехе, и при провале.
+   и `INSERT OR REPLACE`. Пост помечается обработанным только при успехе (LIKED/ALREADY_LIKED →
+   `status=LIKED`). Провальные лайки (CAPTCHA/FAILED/Exception) НЕ записываются в БД —
+   пост повторяется в следующей сессии.
    Исключение: `WebDriverException`/`InvalidSessionIdException` — крах браузера → `break`
    без `mark_processed`, чтобы оставшиеся посты можно было повторить в следующей сессии.
+   Отсеянные посты (стоп-слова/LLM) маркируются `status=FILTERED` — не повторяются.
+   `PostStatus(IntEnum)` в `post.py`: UNKNOWN=0 (миграция), LIKED=1, FILTERED=2.
+   Столбец `status` — для отчётности и возможной повторной проверки ценза, не для логики
+   фильтрации. `is_processed` — без изменений, проверка существования записи.
 6. **`owner_id` для групп отрицательный.** `groups.get` возвращает положительные ID —
    они разворачиваются в `-id`; `resolve_screen_name` для `group`/`page` тоже возвращает `-id`.
 7. **URL постов строятся на домене `vk.ru`** (`https://vk.ru/wall{owner_id}_{item_id}`),
@@ -258,9 +264,12 @@ pytest -m "not browser and not live"    # базовая страховка по
     `.env` в `.gitignore`.
 19. **Декомпозиция PostFilter.** `post_filter.py` содержит `PostFilterProtocol` (Protocol),
     `DateFilter`, `EmptyTextFilter`, `StopWordsFilter`, `LLMTopicFilter` (один класс — одна проверка) и
-    `FilterChain` (композит, `filter(posts) -> list[Post]`; LLMTopicFilter в цепочку не входит —
-    вызывается только через `LLMFilterStage`). `CollectStage._accept()` вызывает
-    `FilterChain.filter()` inline — ранний выход сохранён.
+    `FilterChain` (композит structural: `DateFilter` + `EmptyTextFilter`, без стоп-слов и LLM).
+    `FilterChain.should_skip(post)` — per-post проверка structural-фильтров.
+    `StopWordsFilter` передаётся в `CollectStage` отдельно от `FilterChain` — отсеянные посты
+    маркируются `FILTERED`. `LLMTopicFilter` вызывается только через `LLMFilterStage`.
+    `CollectStage._accept()` перебирает посты построчно: structural → continue (без метки),
+    stop_words → `mark_processed(FILTERED)` + continue, `is_processed` → continue, свои посты → continue.
     **StopWordsFilter** использует `pymorphy3` для лемматизации русских слов: стоп-слово «церковь»
     находит «церковью», «церкви», «церковного». Три группы: `_stop_lemmas` (русские слова через
     лемматизацию), `_stop_substrings` (нерусские/аббревиатуры через substring), `_stop_phrases`
@@ -272,6 +281,9 @@ pytest -m "not browser and not live"    # базовая страховка по
     или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
     каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
     (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
+    Отсеянные посты (стоп-слова в `CollectStage._accept()`, LLM в `LLMFilterStage`) маркируются
+    `mark_processed(..., PostStatus.FILTERED)` — не повторяются в следующих сессиях.
+    `LLMFilterStage` принимает `StateStore` в конструктор для маркировки.
     `llm_max_tokens=1000` (env `VK_LLM_MAX_TOKENS`) — лимит токенов ответа; `max_tokens=1`
     недостаточно для токенизации «SKIP», `5` недостаточно для reasoning-моделей (токены
     уходят на `reasoning_content`, `content` остаётся пустым). `1000` — запас на reasoning + ответ.

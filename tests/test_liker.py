@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from browser import LikeResult
-from post import Post, build_post_url
+from post import Post, PostStatus, build_post_url
 from stages import PipelineContext
 
 
@@ -39,7 +39,6 @@ def liker(mock_config, mock_logger):
     obj._likes_service = MagicMock()
     obj._state = MagicMock()
     obj._browser = MagicMock()
-    obj._filter = MagicMock()
     obj._pipeline = MagicMock()
 
     # Pipeline — pass-through: возвращает контекст с постами без изменений
@@ -130,7 +129,7 @@ class TestRun:
             liker.run(no_limit=True)
 
         liker._likes_service.like.assert_called_once_with(1, 1)
-        liker._state.mark_processed.assert_called_once_with(1, 1)
+        liker._state.mark_processed.assert_called_once_with(1, 1, PostStatus.LIKED)
 
     def test_already_liked_skips_normal_delay(self, liker, mock_config):
         """Уже лайкнутый пост → короткая skip-пауза, обычная пауза НЕ вызывается."""
@@ -164,7 +163,7 @@ class TestRun:
         assert (60, 180) not in uniform_calls
 
     def test_exception_in_cycle_continues(self, liker, mock_config):
-        """Exception при обработке поста → mark_processed, цикл продолжается."""
+        """Exception при обработке поста → БЕЗ mark_processed (повтор), цикл продолжается."""
         posts = [_make_post(1, 1), _make_post(1, 2)]
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
@@ -186,8 +185,9 @@ class TestRun:
         ):
             liker.run(no_limit=True)
 
-        # Оба поста обработаны (mark_processed для обоих)
-        assert liker._state.mark_processed.call_count == 2
+        # Только второй пост (LIKED) — mark_processed. Первый (Exception) — без метки.
+        assert liker._state.mark_processed.call_count == 1
+        liker._state.mark_processed.assert_called_once_with(1, 2, PostStatus.LIKED)
 
     def test_likes_per_session_limit_stops_cycle(self, liker, mock_config):
         """Лимит лайков за сессию достигнут → цикл прерывается."""
@@ -237,6 +237,46 @@ class TestRun:
 
         # Сессия прервана после 3 капч, не все 10 постов обработаны
         assert liker._likes_service.like.call_count == 3
+
+    def test_captcha_not_marked_for_retry(self, liker, mock_config):
+        """CAPTCHA → БЕЗ mark_processed (пост повторится в следующей сессии)."""
+        posts = [_make_post(1, 1)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._state.start_session = MagicMock(return_value=1)
+        liker._state.end_session = MagicMock()
+        liker._state.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.CAPTCHA)
+        liker._state.mark_processed = MagicMock()
+
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+
+        with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0):
+            liker.run(no_limit=True)
+
+        liker._state.mark_processed.assert_not_called()
+
+    def test_failed_not_marked_for_retry(self, liker, mock_config):
+        """FAILED → БЕЗ mark_processed (пост повторится в следующей сессии)."""
+        posts = [_make_post(1, 1)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._state.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._state.start_session = MagicMock(return_value=1)
+        liker._state.end_session = MagicMock()
+        liker._state.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.FAILED)
+        liker._state.mark_processed = MagicMock()
+
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+
+        with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0):
+            liker.run(no_limit=True)
+
+        liker._state.mark_processed.assert_not_called()
 
     def test_jitter_in_auto_mode(self, liker, mock_config):
         """Авто-запуск (no_limit=False) — jitter после проверки авторизации."""

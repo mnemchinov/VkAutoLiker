@@ -6,7 +6,7 @@ litellm.completion мокается через patch — реальных зап
 import time
 from unittest.mock import MagicMock, patch
 
-from post import Post, build_post_url
+from post import Post, PostStatus, build_post_url
 from stages import PipelineContext
 
 
@@ -154,7 +154,8 @@ class TestLLMFilterStage:
         """Стадия отсеивает посты, где LLM ответил SKIP."""
         from stages import LLMFilterStage
 
-        stage = LLMFilterStage(mock_config, mock_logger)
+        state = MagicMock()
+        stage = LLMFilterStage(mock_config, mock_logger, state)
         posts = [
             _make_post(1, 1, "политика"),
             _make_post(2, 2, "нейтральный пост"),
@@ -177,7 +178,7 @@ class TestLLMFilterStage:
         """Ошибка LLM → все посты остаются (should_skip False)."""
         from stages import LLMFilterStage
 
-        stage = LLMFilterStage(mock_config, mock_logger)
+        stage = LLMFilterStage(mock_config, mock_logger, MagicMock())
         posts = [_make_post(1, 1, "a"), _make_post(2, 2, "b")]
         ctx = PipelineContext(config=mock_config, posts=posts)
 
@@ -190,7 +191,7 @@ class TestLLMFilterStage:
         """Пустой список → стадия не вызывает LLM."""
         from stages import LLMFilterStage
 
-        stage = LLMFilterStage(mock_config, mock_logger)
+        stage = LLMFilterStage(mock_config, mock_logger, MagicMock())
         ctx = PipelineContext(config=mock_config, posts=[])
 
         with patch("litellm.completion") as mock_c:
@@ -198,3 +199,21 @@ class TestLLMFilterStage:
 
         assert len(result.posts) == 0
         mock_c.assert_not_called()
+
+    def test_filtered_posts_marked_in_state(self, mock_config, mock_logger):
+        """Отсеянные LLM посты маркируются FILTERED в StateStore."""
+        from stages import LLMFilterStage
+
+        state = MagicMock()
+        stage = LLMFilterStage(mock_config, mock_logger, state)
+        posts = [
+            _make_post(1, 1, "политика"),
+            _make_post(2, 2, "нейтральный"),
+        ]
+        ctx = PipelineContext(config=mock_config, posts=posts)
+
+        responses = [_mock_llm_response("SKIP"), _mock_llm_response("OK")]
+        with patch("litellm.completion", side_effect=responses):
+            stage.process(ctx)
+
+        state.mark_processed.assert_called_once_with(1, 1, PostStatus.FILTERED)

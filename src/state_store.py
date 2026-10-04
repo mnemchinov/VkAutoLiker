@@ -5,6 +5,7 @@ import time
 from datetime import date
 
 from logger import AppLogger
+from post import PostStatus
 from settings import Settings
 
 
@@ -12,9 +13,10 @@ class StateStore:
     """Хранит в SQLite обработанные посты и статистику сессий.
 
     Таблицы:
-      processed_posts (owner_id, item_id, liked_at) — дедупликация;
+      processed_posts (owner_id, item_id, status) — дедупликация;
       sessions (id, started_at, ended_at, likes_count, session_date, is_auto) — лимиты;
       closed_walls (owner_id, last_checked) — кэш закрытых/приватных стен.
+      status: 0=UNKNOWN (миграция), 1=LIKED, 2=FILTERED.
       is_auto=1 — сессия запущена launchd (учитывается в дневном лимите).
       is_auto=0 — ручной запуск через --no-limit (не учитывается в дневном лимите).
     """
@@ -33,7 +35,7 @@ class StateStore:
             CREATE TABLE IF NOT EXISTS processed_posts (
                 owner_id INTEGER NOT NULL,
                 item_id INTEGER NOT NULL,
-                liked_at INTEGER NOT NULL,
+                status INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (owner_id, item_id)
             )
         """)
@@ -54,6 +56,7 @@ class StateStore:
             )
         """)
         self._migrate_sessions_is_auto()
+        self._migrate_processed_posts_status()
         self._conn.commit()
 
     def _migrate_sessions_is_auto(self) -> None:
@@ -68,6 +71,33 @@ class StateStore:
         if "is_auto" not in columns:
             self._conn.execute("ALTER TABLE sessions ADD COLUMN is_auto INTEGER DEFAULT 1")
 
+    def _migrate_processed_posts_status(self) -> None:
+        """Мигрирует processed_posts со старой схемой (liked_at) на новую (status).
+
+        Старые БД имеют колонку liked_at без status. SQLite не поддерживает
+        DROP COLUMN до 3.35.0, поэтому используется pattern:
+        create new → copy → drop old → rename.
+        Существующие записи получают status=0 (UNKNOWN).
+        """
+        cursor = self._conn.execute("PRAGMA table_info(processed_posts)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "status" in columns:
+            return
+        self._conn.execute("""
+            CREATE TABLE processed_posts_new (
+                owner_id INTEGER NOT NULL,
+                item_id INTEGER NOT NULL,
+                status INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (owner_id, item_id)
+            )
+        """)
+        self._conn.execute("""
+            INSERT INTO processed_posts_new (owner_id, item_id, status)
+            SELECT owner_id, item_id, 0 FROM processed_posts
+        """)
+        self._conn.execute("DROP TABLE processed_posts")
+        self._conn.execute("ALTER TABLE processed_posts_new RENAME TO processed_posts")
+
     def is_processed(self, owner_id: int, item_id: int) -> bool:
         """Проверяет, был ли пост уже обработан (лайкнут или пропущен)."""
         cursor = self._conn.execute(
@@ -76,11 +106,19 @@ class StateStore:
         )
         return cursor.fetchone() is not None
 
-    def mark_processed(self, owner_id: int, item_id: int) -> None:
-        """Отмечает пост как обработанный (INSERT OR IGNORE для дедупликации)."""
+    def mark_processed(
+        self, owner_id: int, item_id: int, status: PostStatus = PostStatus.LIKED
+    ) -> None:
+        """Записывает пост в БД с указанным статусом (INSERT OR REPLACE).
+
+        status=LIKED — успешный лайк (или уже был лайкнут).
+        status=FILTERED — отсеян стоп-словами или LLM.
+        INSERT OR REPLACE позволяет перезаписать FILTERED→LIKED при будущем
+        перетестировании ценза (если стоп-слова изменились и пост прошёл).
+        """
         self._conn.execute(
-            "INSERT OR IGNORE INTO processed_posts (owner_id, item_id, liked_at) VALUES (?, ?, ?)",
-            (owner_id, item_id, int(time.time())),
+            "INSERT OR REPLACE INTO processed_posts (owner_id, item_id, status) VALUES (?, ?, ?)",
+            (owner_id, item_id, int(status)),
         )
         self._conn.commit()
 

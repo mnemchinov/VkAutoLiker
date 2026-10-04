@@ -5,15 +5,16 @@ auto_friends → auto_groups. Каждый следующий источник �
 если предыдущие не набрали enough постов.
 
 Внутри каждого источника посты шафлятся (random.shuffle) перед добавлением.
-Фильтрация: FilterChain (days_back + пустой текст + стоп-слова) + StateStore (is_processed).
+Фильтрация: structural (days_back + пустой текст) + stop_words (стоп-слова,
+маркировка FILTERED) + StateStore (is_processed) + свои посты (from_id).
 """
 
 import random
 
 from api import ApiSearchService, VKApiError
 from logger import AppLogger
-from post import Post
-from post_filter import FilterChain
+from post import Post, PostStatus
+from post_filter import FilterChain, StopWordsFilter
 from settings import Settings
 from state_store import StateStore
 
@@ -33,14 +34,20 @@ class CollectStage:
         search_service: ApiSearchService,
         config: Settings,
         state_store: StateStore,
-        post_filter: FilterChain,
+        structural_filter: FilterChain,
         logger: AppLogger,
+        stop_words_filter: StopWordsFilter | None = None,
     ):
-        """Инициализирует стадию сбора с сервисами и конфигурацией."""
+        """Инициализирует стадию сбора с сервисами и конфигурацией.
+
+        structural_filter — дата + пустой текст (без маркировки).
+        stop_words_filter — стоп-слова (отсеянные посты маркируются FILTERED).
+        """
         self._search = search_service
         self._config = config
         self._state = state_store
-        self._filter = post_filter
+        self._structural = structural_filter
+        self._stop_words = stop_words_filter
         self._logger = logger
 
     def process(self, ctx: PipelineContext) -> PipelineContext:
@@ -54,14 +61,19 @@ class CollectStage:
         enough = ctx.target_likes * 2
 
         def _accept(posts: list[Post]) -> None:
-            """Фильтрует (PostFilter + is_processed + свои посты), шафлит, добавляет в all_posts."""
-            filtered = self._filter.filter(posts)
-            fresh = [
-                p
-                for p in filtered
-                if not self._state.is_processed(p.owner_id, p.item_id)
-                and p.from_id != self._config.user_id
-            ]
+            """Фильтрует построчно: structural → stop_words (FILTERED) → is_processed → свои посты."""
+            fresh: list[Post] = []
+            for p in posts:
+                if self._structural.should_skip(p):
+                    continue
+                if self._stop_words is not None and self._stop_words.should_skip(p):
+                    self._state.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                    continue
+                if self._state.is_processed(p.owner_id, p.item_id):
+                    continue
+                if p.from_id == self._config.user_id:
+                    continue
+                fresh.append(p)
             random.shuffle(fresh)
             all_posts.extend(fresh)
 
@@ -177,6 +189,8 @@ class CollectStage:
                     continue
 
         self._logger.info(f"Собрано {len(all_posts)} необработанных постов")
-        self._filter.log_summaries()
+        self._structural.log_summaries()
+        if self._stop_words is not None:
+            self._stop_words.log_summary()
         ctx.posts = all_posts
         return ctx

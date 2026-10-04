@@ -19,7 +19,11 @@ class FilterChain:
 
     def filter(self, posts: list[Post]) -> list[Post]:
         """Возвращает посты, прошедшие все фильтры."""
-        return [p for p in posts if not any(f.should_skip(p) for f in self._filters)]
+        return [p for p in posts if not self.should_skip(p)]
+
+    def should_skip(self, post: Post) -> bool:
+        """Проверяет один пост: True, если хотя бы один фильтр отсёк."""
+        return any(f.should_skip(post) for f in self._filters)
 
     def log_summaries(self) -> None:
         """Вызывает log_summary() у всех фильтров, у которых он есть."""
