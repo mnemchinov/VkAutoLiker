@@ -2,7 +2,8 @@
 
 Конвейер (Pipeline) обрабатывает посты через стадии:
 CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп).
-AutoLiker создаёт Pipeline в конструкторе и вызвает его в run().
+При filter_mode=="llm" добавляется LLMFilterStage (после дедупликации).
+AutoLiker создаёт Pipeline в конструкторе и вызывает его в run().
 """
 
 import random
@@ -30,7 +31,7 @@ class AutoLiker:
     """
 
     def __init__(self, config: Settings, logger: AppLogger):
-        """Создает все сервисы (DI через config + logger): API-клиент, поиск, браузер, лайки, состояние."""
+        """Создаёт все сервисы (DI через config + logger): API, поиск, браузер, лайки, базу, репозитории."""
         self._config = config
         self._logger = logger
 

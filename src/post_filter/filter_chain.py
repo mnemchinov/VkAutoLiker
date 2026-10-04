@@ -1,8 +1,8 @@
-"""Композит: прогоняет пост через список фильтров.
+"""Композит: прогоняет пост через список structural-фильтров.
 
 Пост отсеивается, если хотя бы один фильтр вернул should_skip == True.
-Порядок фильтров важен для производительности: быстрые проверки (date,
-empty) идут раньше тяжёлых (stop_words, LLM).
+Включает только быстрые проверки (date, empty). StopWordsFilter и
+LLMTopicFilter передаются в CollectStage и LLMFilterStage отдельно.
 """
 
 from post import Post

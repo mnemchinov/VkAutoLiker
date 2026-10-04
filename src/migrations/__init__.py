@@ -28,7 +28,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
 
     PRAGMA user_version хранит целое число — текущую версию схемы.
     Каждая миграция выполняется в порядке номеров, version инкрементируется.
-    Все миграции в одной транзакции: commit после каждой.
+    Каждая миграция в отдельной транзакции: commit после каждой.
     """
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     for version in range(current, LATEST_VERSION):

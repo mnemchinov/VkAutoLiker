@@ -3,9 +3,9 @@
 Каждый фильтр реализует PostFilterProtocol.should_skip(post) -> bool:
 True — отсеять пост, False — оставить.
 
-FilterChain объединяет фильтры и применяется в CollectStage._accept().
-Быстрые фильтры (date, empty, stop_words) работают inline при сборе,
-сохраняя ранний выход (enough = target_likes * 2).
+FilterChain объединяет structural-фильтры (date, empty) и применяется
+в CollectStage._accept(). StopWordsFilter передаётся в CollectStage
+отдельно — отсеянные посты маркируются FILTERED.
 
 LLMTopicFilter реализует протокол, но НЕ входит в FilterChain —
 вызывается через LLMFilterStage после DedupStage (стоимость вызова).

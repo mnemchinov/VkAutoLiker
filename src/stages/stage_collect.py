@@ -4,7 +4,7 @@
 auto_friends → auto_groups. Каждый следующий источник подключается только
 если предыдущие не набрали enough постов.
 
-Внутри каждого источника посты шафлятся (random.shuffle) перед добавлением.
+Внутри каждого источника посты перемешиваются (random.shuffle) перед добавлением.
 Фильтрация: structural (days_back + пустой текст) + stop_words (стоп-слова,
 маркировка FILTERED) + PostsRepository (is_processed) + свои посты (from_id).
 """

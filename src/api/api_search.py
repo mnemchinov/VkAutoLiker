@@ -10,7 +10,7 @@ class ApiSearchService:
     """Поиск и сбор постов через VK API с service-токеном.
 
     Методы возвращают List[Post] с реальными датами из API (unix timestamp),
-    что позволяет PostFilter корректно фильтровать по days_back.
+    что позволяет DateFilter корректно фильтровать по days_back.
     """
 
     def __init__(self, client: VKApiClient, logger: AppLogger):
