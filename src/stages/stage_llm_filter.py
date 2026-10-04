@@ -14,8 +14,8 @@ Ban-risk: нулевой — запросы идут к провайдеру LLM
 from logger import AppLogger
 from post import PostStatus
 from post_filter import LLMTopicFilter
+from repositories import PostsRepository
 from settings import Settings
-from state_store import StateStore
 
 from .pipeline import PipelineContext
 
@@ -27,11 +27,11 @@ class LLMFilterStage:
     Отсеянные посты маркируются FILTERED — не повторяются в следующих сессиях.
     """
 
-    def __init__(self, config: Settings, logger: AppLogger, state_store: StateStore):
-        """Инициализирует стадию с LLMTopicFilter и StateStore для маркировки."""
+    def __init__(self, config: Settings, logger: AppLogger, posts_repo: PostsRepository):
+        """Инициализирует стадию с LLMTopicFilter и PostsRepository для маркировки."""
         self._filter = LLMTopicFilter(config, logger)
         self._logger = logger
-        self._state = state_store
+        self._posts_repo = posts_repo
 
     def process(self, ctx: PipelineContext) -> PipelineContext:
         """Фильтрует ctx.posts через LLM, маркирует отсеянные как FILTERED."""
@@ -39,7 +39,7 @@ class LLMFilterStage:
         kept: list = []
         for p in ctx.posts:
             if self._filter.should_skip(p):
-                self._state.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
             else:
                 kept.append(p)
         ctx.posts = kept

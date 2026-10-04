@@ -6,7 +6,7 @@ auto_friends → auto_groups. Каждый следующий источник �
 
 Внутри каждого источника посты шафлятся (random.shuffle) перед добавлением.
 Фильтрация: structural (days_back + пустой текст) + stop_words (стоп-слова,
-маркировка FILTERED) + StateStore (is_processed) + свои посты (from_id).
+маркировка FILTERED) + PostsRepository (is_processed) + свои посты (from_id).
 """
 
 import random
@@ -15,8 +15,8 @@ from api import ApiSearchService, VKApiError
 from logger import AppLogger
 from post import Post, PostStatus
 from post_filter import FilterChain, StopWordsFilter
+from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
-from state_store import StateStore
 
 from .pipeline import PipelineContext
 
@@ -33,7 +33,8 @@ class CollectStage:
         self,
         search_service: ApiSearchService,
         config: Settings,
-        state_store: StateStore,
+        posts_repo: PostsRepository,
+        walls_repo: ClosedWallsRepository,
         structural_filter: FilterChain,
         logger: AppLogger,
         stop_words_filter: StopWordsFilter | None = None,
@@ -45,7 +46,8 @@ class CollectStage:
         """
         self._search = search_service
         self._config = config
-        self._state = state_store
+        self._posts_repo = posts_repo
+        self._walls_repo = walls_repo
         self._structural = structural_filter
         self._stop_words = stop_words_filter
         self._logger = logger
@@ -67,9 +69,9 @@ class CollectStage:
                 if self._structural.should_skip(p):
                     continue
                 if self._stop_words is not None and self._stop_words.should_skip(p):
-                    self._state.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                    self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
                     continue
-                if self._state.is_processed(p.owner_id, p.item_id):
+                if self._posts_repo.is_processed(p.owner_id, p.item_id):
                     continue
                 if p.from_id == self._config.user_id:
                     continue
@@ -96,7 +98,7 @@ class CollectStage:
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID группы: {screen_name}")
                     continue
-                if self._state.is_wall_closed(owner_id):
+                if self._walls_repo.is_wall_closed(owner_id):
                     self._logger.info(f"Стена группы {screen_name} закрыта (кэш), пропуск")
                     continue
                 try:
@@ -105,7 +107,7 @@ class CollectStage:
                     )
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {screen_name}: {e}")
-                    self._state.mark_wall_closed(owner_id)
+                    self._walls_repo.mark_wall_closed(owner_id)
                     continue
                 _accept(posts)
 
@@ -115,7 +117,7 @@ class CollectStage:
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID пользователя: {screen_name}")
                     continue
-                if self._state.is_wall_closed(owner_id):
+                if self._walls_repo.is_wall_closed(owner_id):
                     self._logger.info(f"Стена пользователя {screen_name} закрыта (кэш), пропуск")
                     continue
                 try:
@@ -124,7 +126,7 @@ class CollectStage:
                     )
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов пользователя {screen_name}: {e}")
-                    self._state.mark_wall_closed(owner_id)
+                    self._walls_repo.mark_wall_closed(owner_id)
                     continue
                 _accept(posts)
 
@@ -146,7 +148,7 @@ class CollectStage:
                     self._logger.info(f"Достигнут лимит API-вызовов к друзьям ({api_calls})")
                     break
                 api_calls += 1
-                if self._state.is_wall_closed(fid):
+                if self._walls_repo.is_wall_closed(fid):
                     continue
                 try:
                     posts = self._search.get_wall_posts(
@@ -155,7 +157,7 @@ class CollectStage:
                     _accept(posts)
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов друга {fid}: {e}")
-                    self._state.mark_wall_closed(fid)
+                    self._walls_repo.mark_wall_closed(fid)
                     continue
 
         if len(all_posts) < enough and self._config.auto_groups and self._config.user_id:
@@ -176,7 +178,7 @@ class CollectStage:
                     self._logger.info(f"Достигнут лимит API-вызовов к группам ({api_calls})")
                     break
                 api_calls += 1
-                if self._state.is_wall_closed(gid):
+                if self._walls_repo.is_wall_closed(gid):
                     continue
                 try:
                     posts = self._search.get_wall_posts(
@@ -185,7 +187,7 @@ class CollectStage:
                     _accept(posts)
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {gid}: {e}")
-                    self._state.mark_wall_closed(gid)
+                    self._walls_repo.mark_wall_closed(gid)
                     continue
 
         self._logger.info(f"Собрано {len(all_posts)} необработанных постов")

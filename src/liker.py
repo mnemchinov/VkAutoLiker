@@ -12,12 +12,14 @@ from selenium.common.exceptions import InvalidSessionIdException, WebDriverExcep
 
 from api import ApiSearchService, CaptchaError, VKApiClient
 from browser import BrowserLikesService, LikeResult, VKBrowser
+from database import Database
 from logger import AppLogger
+from migrations import run_migrations
 from post import Post, PostStatus
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
+from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
 from settings import Settings
 from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
-from state_store import StateStore
 
 
 class AutoLiker:
@@ -36,14 +38,19 @@ class AutoLiker:
         self._search_service = ApiSearchService(self._api_client, logger)
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
-        self._state = StateStore(config, logger)
+        self._db = Database(config)
+        run_migrations(self._db.conn)
+        self._posts_repo = PostsRepository(self._db)
+        self._sessions_repo = SessionsRepository(self._db)
+        self._walls_repo = ClosedWallsRepository(self._db, config)
         structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
         stop_words = StopWordsFilter(config, logger) if config.filter_mode == "stop_words" else None
         stages: list = [
             CollectStage(
                 self._search_service,
                 config,
-                self._state,
+                self._posts_repo,
+                self._walls_repo,
                 structural,
                 logger,
                 stop_words_filter=stop_words,
@@ -51,7 +58,7 @@ class AutoLiker:
             DedupStage(),
         ]
         if config.filter_mode == "llm":
-            stages.append(LLMFilterStage(config, logger, self._state))
+            stages.append(LLMFilterStage(config, logger, self._posts_repo))
         self._pipeline = Pipeline(stages)
 
     def login(self) -> None:
@@ -127,14 +134,14 @@ class AutoLiker:
             self._logger.info("=== Сессия AutoLiker запущена ===")
 
         if not no_limit:
-            sessions_today, _likes_today = self._state.get_daily_stats()
+            sessions_today, _likes_today = self._sessions_repo.get_daily_stats()
             if sessions_today >= self._config.sessions_per_day:
                 self._logger.info(
                     f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.sessions_per_day})"
                 )
                 return
 
-        session_id = self._state.start_session(is_auto=not no_limit)
+        session_id = self._sessions_repo.start_session(is_auto=not no_limit)
         likes_count = 0
         already_liked_count = 0
         captcha_streak = 0
@@ -167,7 +174,7 @@ class AutoLiker:
                     )
                     break
 
-                if self._state.is_processed(post.owner_id, post.item_id):
+                if self._posts_repo.is_processed(post.owner_id, post.item_id):
                     continue
 
                 try:
@@ -179,12 +186,16 @@ class AutoLiker:
                         likes_count += 1
                         likes_since_break += 1
                         captcha_streak = 0
-                        self._state.mark_processed(post.owner_id, post.item_id, PostStatus.LIKED)
+                        self._posts_repo.mark_processed(
+                            post.owner_id, post.item_id, PostStatus.LIKED
+                        )
                         self._logger.info(f"Лайкнут ({likes_count}/{target})")
                     elif result == LikeResult.ALREADY_LIKED:
                         already_liked_count += 1
                         captcha_streak = 0
-                        self._state.mark_processed(post.owner_id, post.item_id, PostStatus.LIKED)
+                        self._posts_repo.mark_processed(
+                            post.owner_id, post.item_id, PostStatus.LIKED
+                        )
                         skip_delay = random.uniform(2, 5)
                         time.sleep(skip_delay)
                         continue
@@ -222,8 +233,8 @@ class AutoLiker:
         except KeyboardInterrupt:
             self._logger.info("Прервано пользователем")
         finally:
-            self._state.end_session(session_id, likes_count)
-            total_sessions, total_likes = self._state.get_total_stats()
+            self._sessions_repo.end_session(session_id, likes_count)
+            total_sessions, total_likes = self._sessions_repo.get_total_stats()
             if already_liked_count > 0:
                 self._logger.info(f"Уже лайкнуты: {already_liked_count} постов пропущено")
             self._logger.info(
@@ -236,9 +247,9 @@ class AutoLiker:
 
         Авто-сессии (launchd) и ручные (--no-limit) показываются раздельно.
         """
-        total_sessions, total_likes = self._state.get_total_stats()
-        auto_today, auto_likes_today = self._state.get_daily_stats()
-        manual_sessions, manual_likes = self._state.get_manual_stats()
+        total_sessions, total_likes = self._sessions_repo.get_total_stats()
+        auto_today, auto_likes_today = self._sessions_repo.get_daily_stats()
+        manual_sessions, manual_likes = self._sessions_repo.get_manual_stats()
         self._logger.info(
             f"Статус: авто сегодня={auto_today}/{self._config.sessions_per_day} "
             f"сессий/{auto_likes_today} лайков, "
@@ -248,9 +259,11 @@ class AutoLiker:
 
     def reset(self) -> None:
         """Очищает SQLite-базу (обработанные посты и сессии)."""
-        self._state.reset()
+        self._posts_repo.reset()
+        self._sessions_repo.reset()
+        self._walls_repo.reset()
 
     def close(self) -> None:
         """Закрывает браузер и базу данных."""
-        self._state.close()
+        self._db.close()
         self._browser.close()

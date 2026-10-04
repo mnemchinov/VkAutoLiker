@@ -154,8 +154,8 @@ class TestLLMFilterStage:
         """Стадия отсеивает посты, где LLM ответил SKIP."""
         from stages import LLMFilterStage
 
-        state = MagicMock()
-        stage = LLMFilterStage(mock_config, mock_logger, state)
+        posts_repo = MagicMock()
+        stage = LLMFilterStage(mock_config, mock_logger, posts_repo)
         posts = [
             _make_post(1, 1, "политика"),
             _make_post(2, 2, "нейтральный пост"),
@@ -201,11 +201,11 @@ class TestLLMFilterStage:
         mock_c.assert_not_called()
 
     def test_filtered_posts_marked_in_state(self, mock_config, mock_logger):
-        """Отсеянные LLM посты маркируются FILTERED в StateStore."""
+        """Отсеянные LLM посты маркируются FILTERED в PostsRepository."""
         from stages import LLMFilterStage
 
-        state = MagicMock()
-        stage = LLMFilterStage(mock_config, mock_logger, state)
+        posts_repo = MagicMock()
+        stage = LLMFilterStage(mock_config, mock_logger, posts_repo)
         posts = [
             _make_post(1, 1, "политика"),
             _make_post(2, 2, "нейтральный"),
@@ -216,4 +216,4 @@ class TestLLMFilterStage:
         with patch("litellm.completion", side_effect=responses):
             stage.process(ctx)
 
-        state.mark_processed.assert_called_once_with(1, 1, PostStatus.FILTERED)
+        posts_repo.mark_processed.assert_called_once_with(1, 1, PostStatus.FILTERED)

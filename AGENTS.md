@@ -56,7 +56,9 @@ src/                   — весь код, плоская структура Б
   stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
-  state_store.py       — StateStore: SQLite (processed_posts, sessions)
+  database.py          — Database: подключение SQLite, context manager
+  migrations/          — миграции схемы через PRAGMA user_version (m001–m003)
+  repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
   pipeline.py          — Pipeline + PipelineContext + Stage Protocol
   stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline через FilterChain
   stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
@@ -140,7 +142,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, api_search, browser_likes, state_store, vk_api_client, vk_browser, post_filter, stage_llm_filter, settings"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
 ```
 
 ---
@@ -220,10 +222,10 @@ pytest -m "not browser and not live"    # базовая страховка по
    **Jitter выполняется после проверки авторизации:** `is_logged_in()` — до `random.uniform(0, 1800)`,
    чтобы истёкшая сессия не ждала до 30 минут зря.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
-   в `stage_collect.py` проверяет `StateStore.is_processed()` после `FilterChain.filter()` и **до**
+    в `stage_collect.py` проверяет `PostsRepository.is_processed()` после `FilterChain.filter()` и **до**
    добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
    необработанные посты, иначе нижестоящие источники пропускались бы зря.
-    `FilterChain` не зависит от `StateStore` — проверяет только `days_back`, пустой текст и стоп-слова.
+    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back`, пустой текст и стоп-слова.
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
@@ -231,7 +233,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     `max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
     `wall.get` (не срез списка): достигнут → `break`. Каждая сессия работает со случайным
     подмножеством, а не с одними и теми же первыми N.
-    **Кэш закрытых стен:** перед `wall.get` проверяется `StateStore.is_wall_closed(owner_id)`;
+    **Кэш закрытых стен:** перед `wall.get` проверяется `ClosedWallsRepository.is_wall_closed(owner_id)`;
     при `VKApiError` с кодами 15 (access denied), 18 (deleted/banned), 30 (profile private)
     стена помечается через `mark_wall_closed`. `get_wall_posts()` re-raise'ит эти ошибки,
     вызывающий код в `CollectStage` ловит и кэширует. TTL — `closed_wall_ttl_days`
@@ -283,7 +285,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
     Отсеянные посты (стоп-слова в `CollectStage._accept()`, LLM в `LLMFilterStage`) маркируются
     `mark_processed(..., PostStatus.FILTERED)` — не повторяются в следующих сессиях.
-    `LLMFilterStage` принимает `StateStore` в конструктор для маркировки.
+    `LLMFilterStage` принимает `PostsRepository` в конструктор для маркировки.
     `llm_max_tokens=1000` (env `VK_LLM_MAX_TOKENS`) — лимит токенов ответа; `max_tokens=1`
     недостаточно для токенизации «SKIP», `5` недостаточно для reasoning-моделей (токены
     уходят на `reasoning_content`, `content` остаётся пустым). `1000` — запас на reasoning + ответ.
@@ -302,7 +304,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 - Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
-  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestStateStore`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
+  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
   `patch("vk_api_client.requests.get")` и `patch("vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.

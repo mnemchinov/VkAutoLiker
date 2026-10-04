@@ -1,6 +1,6 @@
 """Unit-тесты стадии сбора постов CollectStage.
 
-Все зависимости (ApiSearchService, StateStore, PostFilter) — MagicMock.
+Все зависимости (ApiSearchService, PostsRepository, WallsRepository, PostFilter) — MagicMock.
 """
 
 import time
@@ -27,10 +27,11 @@ def _make_post(owner_id: int, item_id: int, text: str = "текст поста")
 def collect_stage(mock_config, mock_logger):
     """CollectStage с мок-зависимостями."""
     search = MagicMock()
-    state = MagicMock()
-    state.is_processed = MagicMock(return_value=False)
-    state.is_wall_closed = MagicMock(return_value=False)
-    state.mark_processed = MagicMock()
+    posts_repo = MagicMock()
+    posts_repo.is_processed = MagicMock(return_value=False)
+    posts_repo.mark_processed = MagicMock()
+    walls_repo = MagicMock()
+    walls_repo.is_wall_closed = MagicMock(return_value=False)
     structural = MagicMock()
     structural.should_skip = MagicMock(return_value=False)
     structural.log_summaries = MagicMock()
@@ -41,7 +42,8 @@ def collect_stage(mock_config, mock_logger):
     return CollectStage(
         search,
         mock_config,
-        state,
+        posts_repo,
+        walls_repo,
         structural,
         mock_logger,
         stop_words_filter=stop_words,
@@ -107,7 +109,7 @@ class TestCollectStage:
         posts = [_make_post(1, 1), _make_post(1, 2), _make_post(1, 3)]
         collect_stage._search.search = MagicMock(return_value=posts)
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
-        collect_stage._state.is_processed = MagicMock(
+        collect_stage._posts_repo.is_processed = MagicMock(
             side_effect=lambda owner_id, item_id: (owner_id == 1 and item_id == 2)
         )
 
@@ -136,7 +138,7 @@ class TestCollectStage:
         result_ids = [(p.owner_id, p.item_id) for p in result.posts]
         assert (1, 1) in result_ids
         assert (1, 2) not in result_ids
-        collect_stage._state.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
+        collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
 
     def test_structural_filter_not_marked(self, collect_stage, mock_config):
         """Пост отсеян structural (дата/пустой текст) → БЕЗ mark_processed."""
@@ -153,7 +155,7 @@ class TestCollectStage:
         result_ids = [(p.owner_id, p.item_id) for p in result.posts]
         assert (1, 1) in result_ids
         assert (1, 2) not in result_ids
-        collect_stage._state.mark_processed.assert_not_called()
+        collect_stage._posts_repo.mark_processed.assert_not_called()
 
     def test_own_posts_filtered(self, collect_stage, mock_config):
         """Посты, где from_id == user_id, исключаются — лайкать свои посты не нужно."""

@@ -23,7 +23,7 @@ description: Перед написанием или правкой тестов.
 | `TestApiSearchService` | `test_api_search.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
 | `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain` | `test_post_filter.py` | days_back, пустой текст, стоп-слова, композит |
 | `TestLLMTopicFilter`, `TestLLMFilterStage` | `test_stage_llm_filter.py` | LLM-фильтрация: мок litellm, fallback, stage |
-| `TestStateStore` | `test_state_store.py` | INSERT OR IGNORE, is_processed, сессии |
+| `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии) |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
 | `TestVKBrowserIsLoggedIn` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай |
 | `TestAutoLiker` | `test_liker.py` | _collect_posts, приоритет источников, early-exit, цикл лайков |
@@ -99,7 +99,10 @@ pytest -m "not browser and not live"
 
 ```python
 def test_something(tmp_db_path):
-    store = StateStore(tmp_db_path)
+    from database import Database
+    from settings import Settings
+    config = Settings(db_path=tmp_db_path, service_token="test_token")
+    db = Database(config)
 ```
 
 ### Токен

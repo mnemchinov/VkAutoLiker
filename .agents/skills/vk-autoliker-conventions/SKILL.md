@@ -73,7 +73,7 @@ VK — React-приложение. После клика `aria-label` меняе
 
 ### 9. `is_processed` фильтруется при сборе
 
-`_collect_posts()` в `liker.py` проверяет `StateStore.is_processed()` после
+`_collect_posts()` в `liker.py` проверяет `PostsRepository.is_processed()` после
 `FilterChain.filter()` и **до** добавления в `all_posts`. Ранний выход
 `enough = target_likes * 2` считает только необработанные посты.
 
