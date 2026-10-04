@@ -2,11 +2,11 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-127%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-74%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-77%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
-![Last Commit](https://img.shields.io/github/last-commit/your-username/VkAutoLiker)
+![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 **VkAutoLiker** — это консольная программа на Python, которая **ставит лайки от вашего имени в вашем аккаунте ВКонтакте**, заменяя рутинную ручную работу. Вы сами задаёте, что искать: текстовые запросы, хештеги, стены групп, пользователей, своих друзей и подписок. Программа находит свежие посты и ставит лайк так же, как это сделали бы вы руками — с паузами на «чтение», случайными задержками и дневными лимитами. Это **не сервис накрутки и не массовый лайкер**: никаких чужих аккаунтов, ботов и фейковых профилей — только ваша сессия и ваш обычный Chrome.
@@ -79,7 +79,7 @@ VK API (сбор постов)
 ### Установка
 
 ```bash
-git clone <repo>
+git clone https://github.com/mnemchinov/VkAutoLiker.git
 cd VkAutoLiker
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
