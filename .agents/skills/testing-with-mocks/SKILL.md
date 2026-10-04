@@ -19,8 +19,8 @@ description: Перед написанием или правкой тестов.
 | Класс | Файл | Что тестирует |
 |---|---|---|
 | `TestSettings` | `test_settings.py` | Env vars, дефолты, валидация, SecretStr |
-| `TestVKApiClient` | `test_api_client.py` | Rate-limit, ретраи, error 6/14, сетевые ошибки |
-| `TestApiSearchService` | `test_api_search.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
+| `TestVKApiClient` | `test_vk_api_client.py` | Rate-limit, ретраи, error 6/14, сетевые ошибки |
+| `TestVkApiSearchService` | `test_vk_api_search_service.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
 | `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain` | `test_post_filter.py` | days_back, пустой текст, стоп-слова, композит |
 | `TestLLMTopicFilter`, `TestLLMFilterStage` | `test_stage_llm_filter.py` | LLM-фильтрация: мок litellm, fallback, stage |
 | `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии) |
@@ -112,7 +112,7 @@ def test_something(tmp_db_path):
 ### Приватные методы
 
 Доступ к приватным методам допустим: `svc._find_like_button(...)`,
-`ApiSearchService._parse_newsfeed_item(...)` (как `staticmethod`).
+`VkApiSearchService._parse_newsfeed_item(...)` (как `staticmethod`).
 
 ### HTML-фиксутура
 
@@ -125,7 +125,7 @@ DOM-селекторов — обновлять фиксут** и прогоня
 
 ### Импорты
 
-Тесты используют плоские импорты (`from api_search import ...`), как и `src/`.
+Тесты используют плоские импорты (`from vk_api import ...`), как и `src/`.
 Путь в `sys.path` добавляет `tests/conftest.py`.
 
 ## Покрытие

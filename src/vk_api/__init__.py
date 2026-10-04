@@ -1,11 +1,11 @@
 """Пакет VK API-слоя: HTTP-клиент и сервис поиска постов."""
 
-from .api_search import ApiSearchService
 from .vk_api_client import CaptchaError, VKApiClient, VKApiError
+from .vk_api_search_service import VkApiSearchService
 
 __all__ = [
-    "ApiSearchService",
     "CaptchaError",
     "VKApiClient",
     "VKApiError",
+    "VkApiSearchService",
 ]

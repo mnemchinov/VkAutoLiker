@@ -11,7 +11,6 @@ import time
 
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
-from api import ApiSearchService, CaptchaError, VKApiClient
 from browser import BrowserLikesService, LikeResult, VKBrowser
 from database import Database
 from logger import AppLogger
@@ -21,6 +20,7 @@ from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilte
 from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
 from settings import Settings
 from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
+from vk_api import CaptchaError, VKApiClient, VkApiSearchService
 
 
 class AutoLiker:
@@ -36,7 +36,7 @@ class AutoLiker:
         self._logger = logger
 
         self._api_client = VKApiClient(config, logger)
-        self._search_service = ApiSearchService(self._api_client, logger)
+        self._search_service = VkApiSearchService(self._api_client, logger)
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._db = Database(config)

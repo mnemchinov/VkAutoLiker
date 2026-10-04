@@ -11,12 +11,12 @@ auto_friends → auto_groups. Каждый следующий источник �
 
 import random
 
-from api import ApiSearchService, VKApiError
 from logger import AppLogger
 from post import Post, PostStatus
 from post_filter import FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
+from vk_api import VKApiError, VkApiSearchService
 
 from .pipeline import PipelineContext
 
@@ -31,7 +31,7 @@ class CollectStage:
 
     def __init__(
         self,
-        search_service: ApiSearchService,
+        search_service: VkApiSearchService,
         config: Settings,
         posts_repo: PostsRepository,
         walls_repo: ClosedWallsRepository,

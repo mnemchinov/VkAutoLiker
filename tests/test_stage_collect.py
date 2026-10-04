@@ -1,6 +1,6 @@
 """Unit-тесты стадии сбора постов CollectStage.
 
-Все зависимости (ApiSearchService, PostsRepository, WallsRepository, PostFilter) — MagicMock.
+Все зависимости (VkApiSearchService, PostsRepository, ClosedWallsRepository, FilterChain) — MagicMock.
 """
 
 import time
@@ -194,7 +194,7 @@ class TestCollectStage:
 
     def test_vkapierror_on_wall_get_skips_source(self, collect_stage, mock_config):
         """VKApiError на get_wall_posts — источник пропускается, сбор продолжается."""
-        from api import VKApiError
+        from vk_api import VKApiError
 
         mock_config.queries = []
         mock_config.hashtags = []

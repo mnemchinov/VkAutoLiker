@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock
 
-from api import ApiSearchService
 from post import Post
+from vk_api import VkApiSearchService
 
 
-class TestApiSearchService:
+class TestVkApiSearchService:
     def test_search_returns_posts(self, mock_config, mock_logger):
         client = MagicMock()
         client.call.return_value = {
@@ -14,7 +14,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.search("test", max_posts=10)
 
         assert len(posts) == 2
@@ -32,7 +32,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.search_hashtag("#test", max_posts=5)
 
         assert len(posts) == 1
@@ -42,7 +42,7 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {"items": []}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.search("nothing", max_posts=10)
 
         assert len(posts) == 0
@@ -56,7 +56,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.get_wall_posts(-123, max_posts=10)
 
         assert len(posts) == 2
@@ -69,7 +69,7 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {"items": all_ids}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         friends = svc.get_friends(12345)
 
         assert friends == all_ids
@@ -82,7 +82,7 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {"items": items}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         groups = svc.get_groups(12345)
 
         assert len(groups) == 50
@@ -93,7 +93,7 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {"type": "group", "object_id": 123456}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         owner_id = svc.resolve_screen_name("magnitretail")
 
         assert owner_id == -123456
@@ -102,7 +102,7 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {"type": "user", "object_id": 789}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         owner_id = svc.resolve_screen_name("id789")
 
         assert owner_id == 789
@@ -111,13 +111,13 @@ class TestApiSearchService:
         client = MagicMock()
         client.call.return_value = {}
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         owner_id = svc.resolve_screen_name("nonexistent")
 
         assert owner_id is None
 
     def test_parse_newsfeed_item_missing_fields(self, mock_config, mock_logger):
-        result = ApiSearchService._parse_newsfeed_item({"text": "no ids"})
+        result = VkApiSearchService._parse_newsfeed_item({"text": "no ids"})
         assert result is None
 
     def test_date_from_api_in_post(self, mock_config, mock_logger):
@@ -128,7 +128,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.search("test", max_posts=1)
 
         assert posts[0].date == 1699999999
@@ -148,7 +148,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.get_wall_posts(-123, max_posts=1)
 
         assert posts[0].from_id == 999
@@ -168,7 +168,7 @@ class TestApiSearchService:
             ]
         }
 
-        svc = ApiSearchService(client, mock_logger)
+        svc = VkApiSearchService(client, mock_logger)
         posts = svc.search("test", max_posts=1)
 
         assert posts[0].from_id == 888

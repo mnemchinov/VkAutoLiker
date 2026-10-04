@@ -6,7 +6,7 @@ from post import Post, build_post_url
 from .vk_api_client import VKApiClient, VKApiError
 
 
-class ApiSearchService:
+class VkApiSearchService:
     """Поиск и сбор постов через VK API с service-токеном.
 
     Методы возвращают List[Post] с реальными датами из API (unix timestamp),

@@ -50,8 +50,9 @@ src/                   — весь код, плоская структура Б
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
   post.py              — dataclass Post (owner_id, item_id, text, date, url)
-  vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
-  api_search.py        — ApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
+  vk_api/              — пакет клиента VK API: VKApiClient, VkApiSearchService, VKApiError, CaptchaError
+    vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
+    vk_api_search_service.py — VkApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
   post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter (декомпозиция PostFilter)
   stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
@@ -188,7 +189,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных пауз
    в коде быть не должно — это осознанная имитация человека. Исключения: `time.sleep(1)`
-   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `vk_api_client.py`,
+   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `vk_api/vk_api_client.py`,
    `random.uniform(1, 3)` после клика, `random.uniform(55, 65)` в `is_logged_in()`.
 2. **Rate-limit VK API ≈ 3 запроса/сек** (`_min_interval = 0.34`). Любой новый вызов API
    обязан идти через `VKApiClient.call()` — иначе лимиты и обработка ошибок 6/14 теряются.
@@ -302,11 +303,11 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Практики тестирования
 
-- Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestApiSearchService`,
+- Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestVkApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
   `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
-  `patch("vk_api_client.requests.get")` и `patch("vk_api_client.time.sleep")` — тесты
+  `patch("vk_api.vk_api_client.requests.get")` и `patch("vk_api.vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.
 - **Фикстуры в `tests/conftest.py`** — переиспользовать их, не дублировать:
   `mock_config_data` / `mock_config` (готовый `Settings` с дефолтами),
