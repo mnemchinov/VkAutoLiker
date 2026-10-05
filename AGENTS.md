@@ -230,7 +230,8 @@ pytest -m "not browser and not live"    # базовая страховка по
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
-    проверяя `is_processed` + `FilterChain` inline. Early-exit при `len(all_posts) >= enough`.
+    проверяя `is_processed` + `FilterChain` inline. Early-exit при `len(all_posts) >= enough`,
+    но не раньше `min_friends_to_poll` опрошенных друзей — гарантирует разнообразие источников.
     `max_friends_to_collect`/`max_groups_to_collect` — safety-кап на число API-вызовов
     `wall.get` (не срез списка): достигнут → `break`. Каждая сессия работает со случайным
     подмножеством, а не с одними и теми же первыми N.

@@ -179,8 +179,9 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `max_posts_per_hashtag` | `VK_MAX_POSTS_PER_HASHTAG` | `100` | — | Лимит постов с одного хештега (пагинация через `start_time`) |
 | `max_posts_per_group` | `VK_MAX_POSTS_PER_GROUP` | `100` | — | Лимит постов со стены одной группы |
 | `max_posts_per_account` | `VK_MAX_POSTS_PER_ACCOUNT` | `100` | — | Лимит постов со стены одного пользователя |
-| `max_posts_per_friend` | `VK_MAX_POSTS_PER_FRIEND` | `10` | — | Лимит постов со стены одного друга |
+| `max_posts_per_friend` | `VK_MAX_POSTS_PER_FRIEND` | `100` | — | Лимит постов со стены одного друга |
 | `max_friends_to_collect` | `VK_MAX_FRIENDS_TO_COLLECT` | `200` | — | Макс. число API-вызовов `wall.get` к друзьям (из всех, случайно) |
+| `min_friends_to_poll` | `VK_MIN_FRIENDS_TO_POLL` | `20` | — | Минимум друзей для опроса до раннего выхода по `enough` |
 | `max_groups_to_collect` | `VK_MAX_GROUPS_TO_COLLECT` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
 | `days_back` | `VK_DAYS_BACK` | `30` | — | Не лайкать посты старше N дней |
 | `stop_words` | `VK_STOP_WORDS` | `[]` | `18+,казино` | Стоп-слова inline (дополнительные к файлу, comma-separated) |
@@ -221,7 +222,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `llm_api_key` | `VK_LLM_API_KEY` | `""` | `sk-...` | API-ключ провайдера (`SecretStr`, НЕ коммитить; для Ollama — любая непустая строка) |
 | `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт (переопределяет сборку из `llm_stop_topics`) |
 | `llm_stop_topics` | `VK_LLM_STOP_TOPICS` | (8 тем по умолчанию) | `политика,религия` | Стоп-темы для LLM (comma-separated; встроенный промпт, если `llm_system_prompt` пуст) |
-| `llm_timeout` | `VK_LLM_TIMEOUT` | `10` | `30` | Таймаут запроса к LLM (сек) |
+| `llm_timeout` | `VK_LLM_TIMEOUT` | `30` | `10` | Таймаут запроса к LLM (сек; reasoning-модели отвечают за 15–20 сек) |
 | `llm_max_tokens` | `VK_LLM_MAX_TOKENS` | `1000` | `5` | Лимит токенов в ответе LLM (reasoning-моделям нужен запас на размышление + ответ) |
 | `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
 | `llm_ssl_verify` | `VK_LLM_SSL_VERIFY` | `true` | `false` | Проверка SSL-сертификата LLM-endpoint (`false` — для корпоративных CA) |
