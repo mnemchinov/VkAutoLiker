@@ -68,8 +68,9 @@ class Settings(BaseSettings):
     max_posts_per_hashtag: int = 100
     max_posts_per_group: int = 100
     max_posts_per_account: int = 100
-    max_posts_per_friend: int = 10
+    max_posts_per_friend: int = 100
     max_friends_to_collect: int = 200
+    min_friends_to_poll: int = 20
     max_groups_to_collect: int = 200
     days_back: int = 30
     stop_words: Annotated[list[str], NoDecode] = []
@@ -91,7 +92,7 @@ class Settings(BaseSettings):
         "спам, реклама запрещённых товаров и услуг",
         "конфликты, оскорбления, травля, провокации",
     ]
-    llm_timeout: int = 10
+    llm_timeout: int = 30
     llm_max_tokens: int = 1000
     llm_max_text_length: int = 500
     llm_ssl_verify: bool = True
