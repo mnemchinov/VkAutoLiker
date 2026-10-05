@@ -71,6 +71,7 @@ class LLMTopicFilter(PostFilterProtocol):
                 timeout=self._config.llm_timeout,
                 temperature=0,
                 max_tokens=self._config.llm_max_tokens,
+                max_retries=0,
             )
             answer = response.choices[0].message.content.strip().upper()
             skip = "SKIP" in answer
