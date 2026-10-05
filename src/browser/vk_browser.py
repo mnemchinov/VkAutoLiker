@@ -165,12 +165,23 @@ class VKBrowser:
             )
             cache_dirs = ["Cache", "Code Cache", "GPUCache", "Service Worker/CacheStorage"]
             for cache_name in cache_dirs:
-                cache_path = profile / cache_name
+                cache_path = profile / "Default" / cache_name
                 if cache_path.is_dir():
                     try:
                         shutil.rmtree(cache_path)
                     except OSError as e:
                         self._logger.debug(f"Не удалось удалить {cache_name}: {e}")
+            prefs = profile / "Default" / "Preferences"
+            if prefs.is_file():
+                try:
+                    prefs_mb = prefs.stat().st_size / 1024 / 1024
+                    if prefs_mb > 50:
+                        self._logger.warning(
+                            f"Preferences: {prefs_mb:.0f} MB > 50 MB — удаление (Chrome пересоздаст)"
+                        )
+                        prefs.unlink()
+                except OSError as e:
+                    self._logger.debug(f"Не удалось удалить Preferences: {e}")
             self._logger.info("Очистка кэша профиля Chrome завершена")
 
     def start(self, headless: bool | None = None) -> None:
