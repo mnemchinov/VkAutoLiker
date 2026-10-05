@@ -306,3 +306,28 @@ class TestCollectStage:
 
         assert collect_stage._search.get_wall_posts.call_count == 3
         assert result.posts == []
+
+    def test_min_friends_to_poll_prevents_early_exit(self, collect_stage, mock_config):
+        """min_friends_to_poll — ранний выход не срабатывает, пока не опрошено N друзей."""
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        mock_config.min_friends_to_poll = 5
+
+        friend_ids = list(range(100, 110))  # 10 друзей
+        collect_stage._search.get_friends = MagicMock(return_value=friend_ids)
+
+        def wall_side_effect(owner_id, max_posts=10):
+            return [_make_post(owner_id, j) for j in range(3)]
+
+        collect_stage._search.get_wall_posts = MagicMock(side_effect=wall_side_effect)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        collect_stage.process(ctx)
+
+        # enough = 5 * 2 = 10; 4 друга × 3 поста = 12 ≥ 10, но min_friends_to_poll=5
+        # → early-exit не срабатывает до 5-го друга
+        assert collect_stage._search.get_wall_posts.call_count >= 5

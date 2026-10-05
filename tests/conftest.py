@@ -33,6 +33,7 @@ def mock_config_data():
         "max_posts_per_account": 100,
         "max_posts_per_friend": 50,
         "max_friends_to_collect": 100,
+        "min_friends_to_poll": 0,
         "max_groups_to_collect": 100,
         "days_back": 7,
         "stop_words": ["политика"],

@@ -139,7 +139,7 @@ class CollectStage:
             random.shuffle(friend_ids)
             api_calls = 0
             for fid in friend_ids:
-                if len(all_posts) >= enough:
+                if len(all_posts) >= enough and api_calls >= self._config.min_friends_to_poll:
                     self._logger.info(
                         f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей"
                     )
