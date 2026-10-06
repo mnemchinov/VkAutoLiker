@@ -92,7 +92,7 @@ class Settings(BaseSettings):
         "спам, реклама запрещённых товаров и услуг",
         "конфликты, оскорбления, травля, провокации",
     ]
-    llm_timeout: int = 30
+    llm_timeout: int = 60
     llm_max_tokens: int = 1000
     llm_max_text_length: int = 500
     llm_ssl_verify: bool = True

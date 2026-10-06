@@ -23,7 +23,14 @@ DEFAULT_SYSTEM_PROMPT_TEMPLATE = """Ты — модератор постов В�
 Отклоняй (ответ SKIP) посты на темы:
 {topics}
 
+Определяй тему только по тексту поста. Не углубляйся в рассуждения, \
+не переходи по ссылкам, не анализируй содержимое по URL.
+
 Ответь только одним словом: SKIP или OK."""
+
+
+class LLMTimeoutError(Exception):
+    """Таймаут LLM-запроса — пост должен быть пропущен без маркировки."""
 
 
 class LLMTopicFilter(PostFilterProtocol):
@@ -53,7 +60,9 @@ class LLMTopicFilter(PostFilterProtocol):
     def should_skip(self, post: Post) -> bool:
         """True, если LLM определил пост как нежелательный (SKIP).
 
-        При ошибке LLM — False (не отсеивать). Текст обрезается до max_text_length.
+        При таймауте LLM — поднимает LLMTimeoutError, чтобы вызывающий код
+        пропустил пост без маркировки (пост попадёт в следующую выборку).
+        При другой ошибке LLM — False (не отсеивать). Текст обрезается до max_text_length.
         """
         text = post.text.strip()[: self._config.llm_max_text_length]
         if not text:
@@ -79,6 +88,9 @@ class LLMTopicFilter(PostFilterProtocol):
                 f"LLM: пост {post.owner_id}_{post.item_id} → ответ={answer!r} skip={skip}"
             )
             return skip
+        except litellm.Timeout as e:
+            self._logger.warning(f"Таймаут LLM для поста {post.owner_id}_{post.item_id}: {e}")
+            raise LLMTimeoutError(str(e)) from e
         except Exception as e:
             self._logger.warning(f"Ошибка LLM для поста {post.owner_id}_{post.item_id}: {e}")
             return False

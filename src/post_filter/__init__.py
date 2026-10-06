@@ -14,7 +14,7 @@ LLMTopicFilter реализует протокол, но НЕ входит в Fi
 from .date_filter import DateFilter
 from .empty_text_filter import EmptyTextFilter
 from .filter_chain import FilterChain
-from .llm_topic_filter import LLMTopicFilter
+from .llm_topic_filter import LLMTimeoutError, LLMTopicFilter
 from .protocol import PostFilterProtocol
 from .stop_words_filter import StopWordsFilter
 
@@ -22,6 +22,7 @@ __all__ = [
     "DateFilter",
     "EmptyTextFilter",
     "FilterChain",
+    "LLMTimeoutError",
     "LLMTopicFilter",
     "PostFilterProtocol",
     "StopWordsFilter",

@@ -36,7 +36,7 @@ class TestSettings:
         assert s.days_back == 30
         assert s.filter_mode == "stop_words"
         assert s.queries == []
-        assert s.llm_timeout == 30
+        assert s.llm_timeout == 60
         assert s.min_friends_to_poll == 20
 
     def test_secret_str_masks_token(self, mock_config_data, monkeypatch):

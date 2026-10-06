@@ -6,7 +6,10 @@ litellm.completion мокается через patch — реальных зап
 import time
 from unittest.mock import MagicMock, patch
 
+import litellm
+
 from post import Post, PostStatus, build_post_url
+from post_filter import LLMTimeoutError
 from stages import PipelineContext
 
 
@@ -61,6 +64,23 @@ class TestLLMTopicFilter:
 
         with patch("litellm.completion", side_effect=RuntimeError("timeout")):
             assert f.should_skip(post) is False
+
+    def test_timeout_raises_llm_timeout_error(self, mock_config, mock_logger):
+        """Таймаут LLM → LLMTimeoutError (пост пропускается без маркировки)."""
+        from post_filter import LLMTopicFilter
+
+        f = LLMTopicFilter(mock_config, mock_logger)
+        post = _make_post(1, 1, "любой пост")
+
+        with patch(
+            "litellm.completion",
+            side_effect=litellm.Timeout("timeout", model="test", llm_provider="openai"),
+        ):
+            try:
+                f.should_skip(post)
+                assert False, "Должен был подняться LLMTimeoutError"
+            except LLMTimeoutError:
+                pass
 
     def test_empty_text_not_sent(self, mock_config, mock_logger):
         """Пустой текст → should_skip False без вызова LLM."""
@@ -217,3 +237,26 @@ class TestLLMFilterStage:
             stage.process(ctx)
 
         posts_repo.mark_processed.assert_called_once_with(1, 1, PostStatus.FILTERED)
+
+    def test_timeout_post_skipped_without_marking(self, mock_config, mock_logger):
+        """Таймаут LLM → пост пропускается без маркировки (попадёт в следующую выборку)."""
+        from stages import LLMFilterStage
+
+        posts_repo = MagicMock()
+        stage = LLMFilterStage(mock_config, mock_logger, posts_repo)
+        posts = [
+            _make_post(1, 1, "таймаут"),
+            _make_post(2, 2, "нейтральный"),
+        ]
+        ctx = PipelineContext(config=mock_config, posts=posts)
+
+        responses = [
+            litellm.Timeout("timeout", model="test", llm_provider="openai"),
+            _mock_llm_response("OK"),
+        ]
+        with patch("litellm.completion", side_effect=responses):
+            result = stage.process(ctx)
+
+        assert len(result.posts) == 1
+        assert result.posts[0].owner_id == 2
+        posts_repo.mark_processed.assert_not_called()

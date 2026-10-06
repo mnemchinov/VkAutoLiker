@@ -13,7 +13,7 @@ Ban-risk: нулевой — запросы идут к провайдеру LLM
 
 from logger import AppLogger
 from post import PostStatus
-from post_filter import LLMTopicFilter
+from post_filter import LLMTimeoutError, LLMTopicFilter
 from repositories import PostsRepository
 from settings import Settings
 
@@ -34,14 +34,21 @@ class LLMFilterStage:
         self._posts_repo = posts_repo
 
     def process(self, ctx: PipelineContext) -> PipelineContext:
-        """Фильтрует ctx.posts через LLM, маркирует отсеянные как FILTERED."""
+        """Фильтрует ctx.posts через LLM, маркирует отсеянные как FILTERED.
+
+        При таймауте LLM (LLMTimeoutError) пост пропускается без маркировки —
+        попадёт в следующую выборку для повторной проверки.
+        """
         before = len(ctx.posts)
         kept: list = []
         for p in ctx.posts:
-            if self._filter.should_skip(p):
-                self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
-            else:
-                kept.append(p)
+            try:
+                if self._filter.should_skip(p):
+                    self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                else:
+                    kept.append(p)
+            except LLMTimeoutError:
+                continue
         ctx.posts = kept
         removed = before - len(ctx.posts)
         self._logger.info(f"LLM-фильтр: {before} → {len(ctx.posts)} постов ({removed} отсеяно)")
