@@ -380,3 +380,14 @@ class TestRun:
         # Проверяем, что хотя бы один sleep был >= 60 сек (burst pause)
         long_pauses = [call for call in mock_sleep.call_args_list if call.args[0] >= 60]
         assert len(long_pauses) > 0
+
+
+class TestClose:
+    """Тесты close: браузер закрывается до БД, Chrome не остаётся висеть."""
+
+    def test_close_closes_browser_and_db(self, liker):
+        """close() закрывает и браузер, и БД."""
+        liker.close()
+
+        liker._browser.close.assert_called_once()
+        liker._db.close.assert_called_once()
