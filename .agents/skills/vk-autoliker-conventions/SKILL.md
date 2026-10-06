@@ -98,7 +98,9 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 ### 12. Stale Chrome cleanup перед стартом
 
 `VKBrowser.start()` завершает процессы Chrome, использующие `chrome_profile/`
-(через `pgrep` + `SIGTERM`), иначе `SessionNotCreatedException`.
+(`pgrep` + `SIGTERM` на POSIX, PowerShell CIM + `SIGTERM` на Windows), иначе
+`SessionNotCreatedException`. Размер профиля считается через `rglob` (без `du`),
+`AutoLiker.close()` делает `driver.quit()` через `VKBrowser.close()`.
 
 ## Сеть и ретраи
 

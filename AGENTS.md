@@ -245,10 +245,13 @@ pytest -m "not browser and not live"    # базовая страховка по
     auto_friends → auto_groups. Каждый следующий источник собирается только если
     предыдущие не набрали `enough` постов. Финального перемешивания между источниками нет.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
-    использующие `chrome_profile/` (через `pgrep` + `SIGTERM`), удаляет lock-файлы
-    (`SingletonLock`, `SingletonCookie`, `SingletonSocket`) и проверяет размер профиля:
-    при превышении `profile_max_size_mb` (дефолт 500) чистит кэш-подкаталоги
-    (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
+    использующие `chrome_profile/` (`pgrep` + `SIGTERM` на POSIX, PowerShell CIM + `SIGTERM`
+    на Windows), удаляет lock-файлы (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
+    и проверяет размер профиля: при превышении `profile_max_size_mb` (дефолт 500) чистит
+    кэш-подкаталоги (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
+    Размер считается рекурсивным обходом (`rglob`) — утилиты `du` на Windows нет.
+    `AutoLiker.close()` вызывает `VKBrowser.close()` (`driver.quit()`), иначе Chrome
+    остаётся висеть и держит профиль для следующего запуска.
 13. **Клик через ActionChains.** `click_element` использует `move_to_element + pause + click`
     (мышиная траектория), а не синтетический `element.click()`.
 14. **Капча-стоп.** `_detect_captcha()` в `browser_likes.py` проверяет CSS-селектор капчи;
@@ -258,8 +261,10 @@ pytest -m "not browser and not live"    # базовая страховка по
     `random.uniform(60, 180)` сек для имитации отвлечения.
 16. **`like()` возвращает `LikeResult`** (LIKED / ALREADY_LIKED / CAPTCHA / FAILED) —
     отдельный `is_liked()` не нужен, двойная навигация устранена.
-17. **Chrome version auto-detect.** `vk_browser.py` определяет версию Chrome через
-    `subprocess` и передаёт `version_main` в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
+17. **Chrome version auto-detect.** `vk_browser.py` определяет версию Chrome: на Windows
+    читает реестр (`HK{CU,LM}\Software\Google\Chrome\BLBeacon` — `chrome.exe --version`
+    там ничего не печатает), на остальных ОС — `subprocess`. Передаёт `version_main`
+    в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
 18. **Config validation.** `@model_validator` в `Settings` проверяет `min <= max` для всех
     пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`,
     `filter_mode` и `llm_model` при `filter_mode=="llm"`.
