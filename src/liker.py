@@ -265,6 +265,10 @@ class AutoLiker:
         self._walls_repo.reset()
 
     def close(self) -> None:
-        """Закрывает браузер и базу данных."""
-        self._db.close()
+        """Закрывает браузер и базу данных.
+
+        Без browser.close() Chrome остаётся висеть после завершения процесса
+        и держит профиль — следующий запуск падает с SessionNotCreatedException.
+        """
         self._browser.close()
+        self._db.close()

@@ -20,6 +20,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from logger import AppLogger
 from settings import Settings
 
+if platform.system() == "Windows":
+    import winreg
+
 
 class VKBrowser:
     """Обёртка над Selenium WebDriver с антидетект-настройками.
@@ -39,12 +42,19 @@ class VKBrowser:
 
     @staticmethod
     def _detect_chrome_version() -> int | None:
-        """Определяет мажорную версию установленного Chrome через subprocess.
+        """Определяет мажорную версию установленного Chrome.
 
+        Windows: chrome.exe --version не выводит версию (GUI-приложение) —
+        читаем реестр (BLBeacon). Остальные ОС: chrome --version.
         UC без version_main скачивает последний ChromeDriver, который может
         не совпадать с установленным Chrome. Авто-детект предотвращает
         SessionNotCreatedException из-за несовпадения версий.
         """
+        if platform.system() == "Windows":
+            version = VKBrowser._detect_chrome_version_windows()
+            if version is not None:
+                return version
+
         chrome_paths = {
             "Darwin": ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"],
             "Linux": [
@@ -69,6 +79,23 @@ class VKBrowser:
                 version_str = result.stdout.strip().split()[-1]
                 return int(version_str.split(".")[0])
             except (FileNotFoundError, subprocess.SubprocessError, ValueError, IndexError):
+                continue
+        return None
+
+    @staticmethod
+    def _detect_chrome_version_windows() -> int | None:
+        """Читает мажорную версию Chrome из реестра Windows (ключ BLBeacon).
+
+        chrome.exe --version на Windows не печатает версию в stdout, поэтому
+        реестр — надёжный способ без сторонних утилит. Проверяются HKCU и
+        HKLM: установка может быть на пользователя или на всю систему.
+        """
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(hive, r"Software\Google\Chrome\BLBeacon") as key:
+                    version, _ = winreg.QueryValueEx(key, "version")
+                return int(str(version).split(".")[0])
+            except OSError:
                 continue
         return None
 
@@ -111,16 +138,38 @@ class VKBrowser:
             raise RuntimeError("Браузер не запущен. Сначала вызовите start().")
         return self._driver
 
-    def _kill_stale_chrome(self) -> None:
-        """Завершает процессы Chrome и удаляет lock-файлы профиля — иначе SessionNotCreatedException."""
-        try:
+    def _stale_chrome_pids(self) -> list[int]:
+        """Возвращает PID процессов Chrome, использующих наш профиль.
+
+        POSIX: pgrep -f по пути профиля. Windows: pgrep отсутствует — ищем
+        chrome.exe с нашим путём профиля в командной строке через PowerShell CIM.
+        """
+        if platform.system() == "Windows":
+            profile = str(Path(self._profile_path).resolve())
+            script = (
+                "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+                f"Where-Object {{ $_.CommandLine -like '*{profile}*' }} | "
+                "Select-Object -ExpandProperty ProcessId"
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        else:
             result = subprocess.run(
                 ["pgrep", "-f", self._profile_path],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            pids = [int(p) for p in result.stdout.split() if p.strip()]
+        return [int(p) for p in result.stdout.split() if p.strip()]
+
+    def _kill_stale_chrome(self) -> None:
+        """Завершает процессы Chrome и удаляет lock-файлы профиля — иначе SessionNotCreatedException."""
+        try:
+            pids = self._stale_chrome_pids()
             for pid in pids:
                 try:
                     os.kill(pid, signal.SIGTERM)
@@ -152,11 +201,9 @@ class VKBrowser:
             return
 
         try:
-            result = subprocess.run(
-                ["du", "-sk", str(profile)], capture_output=True, text=True, check=True
-            )
-            total_mb = int(result.stdout.split()[0]) / 1024
-        except (subprocess.CalledProcessError, ValueError, IndexError):
+            total_bytes = sum(p.stat().st_size for p in profile.rglob("*") if p.is_file())
+            total_mb = total_bytes / 1024 / 1024
+        except OSError:
             return
 
         if total_mb > self._config.profile_max_size_mb:
