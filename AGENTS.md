@@ -284,17 +284,24 @@ pytest -m "not browser and not live"    # базовая страховка по
 20. **LLM-фильтрация опциональна.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию)
     или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
     каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
-    (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
+    (безопасный fallback). **Таймаут LLM** (`litellm.Timeout`) → `LLMTimeoutError` → пост
+    пропускается без маркировки (не LIKED, не FILTERED) → попадёт в следующую выборку.
+    LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
     Отсеянные посты (стоп-слова в `CollectStage._accept()`, LLM в `LLMFilterStage`) маркируются
     `mark_processed(..., PostStatus.FILTERED)` — не повторяются в следующих сессиях.
     `LLMFilterStage` принимает `PostsRepository` в конструктор для маркировки.
+    `llm_timeout=60` (env `VK_LLM_TIMEOUT`) — таймаут LLM-запроса; reasoning-модели отвечают
+    за 15–20 сек, 60 сек — запас. `max_retries=0` передаётся в litellm — отключает ретраи
+    OpenAI-клиента (default 2), один таймаут = 60 сек вместо 180.
     `llm_max_tokens=1000` (env `VK_LLM_MAX_TOKENS`) — лимит токенов ответа; `max_tokens=1`
     недостаточно для токенизации «SKIP», `5` недостаточно для reasoning-моделей (токены
     уходят на `reasoning_content`, `content` остаётся пустым). `1000` — запас на reasoning + ответ.
     Каждый ответ логируется на INFO.
-    Системный промпт собирается из `llm_stop_topics` (список стоп-тем в `Settings`,
-    переопределяется через `VK_LLM_STOP_TOPICS`); `llm_system_prompt` полностью заменяет
-    сборку, если задан. `llm_ssl_verify=False` (env `VK_LLM_SSL_VERIFY=false`) отключает
+    Системный промпт: «не углубляйся в рассуждения, не переходи по ссылкам, определяй тему
+    только по тексту поста» — сокращает reasoning MagnitCopilot. Собирается из `llm_stop_topics`
+    (список стоп-тем в `Settings`, переопределяется через `VK_LLM_STOP_TOPICS`);
+    `llm_system_prompt` полностью заменяет сборку, если задан.
+    `llm_ssl_verify=False` (env `VK_LLM_SSL_VERIFY=false`) отключает
     проверку SSL через `litellm.client_session = httpx.Client(verify=False)` — для
     корпоративных endpoint'ов с CA, отсутствующим в `certifi`.
 22. **Фильтрация своих постов.** `Post.from_id` — автор поста (VK API `from_id`).
