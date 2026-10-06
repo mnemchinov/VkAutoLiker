@@ -46,6 +46,7 @@ README.md              — документация проекта
 .gitignore             — исключения (chrome_profile, *.db, *.log, .venv и т.д.)
 src/                   — весь код, плоская структура БЕЗ __init__.py
   main.py              — CLI-точка входа (login|run|test|status|reset)
+  file_lock.py         — FileLock: кроссплатформенная файловая блокировка (fcntl/msvcrt)
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)

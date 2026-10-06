@@ -102,10 +102,11 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 ## Сеть и ретраи
 
-### Двойной запуск (fcntl.flock)
+### Двойной запуск (FileLock: fcntl / msvcrt)
 
-`main.py` использует `fcntl.flock` exclusive file lock при старте. Второй процесс
-(launchd двойной запуск) находит lock занятым и немедленно завершается.
+`main.py` через `FileLock` (`src/file_lock.py`) берёт эксклюзивную файловую
+блокировку при старте: `fcntl.flock` на POSIX, `msvcrt.locking` на Windows.
+Второй процесс (launchd двойной запуск) находит lock занятым и немедленно завершается.
 
 ### finally в main()
 
