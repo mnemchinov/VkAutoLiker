@@ -2,13 +2,12 @@
 """Точка входа CLI: login | run | test | status | reset."""
 
 import argparse
-import fcntl
 import sys
 from pathlib import Path
-from typing import TextIO
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from file_lock import FileLock
 from liker import AutoLiker
 from logger import AppLogger
 from settings import get_settings
@@ -17,20 +16,18 @@ from settings import get_settings
 _LOCK_FILE = Path(__file__).parent / ".autoliker.lock"
 
 
-def _acquire_lock() -> TextIO:
+def _acquire_lock() -> FileLock:
     """Захватывает эксклюзивную блокировку. При неудаче — выход.
 
     launchd иногда стартует процесс дважды в один слот. Без блокировки
     второй процесс убивает Chrome первого через _kill_stale_chrome(),
     после чего первый работает с мёртвой сессией (invalid session id).
     """
-    lock_file = open(_LOCK_FILE, "w")
-    try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lock_file
-    except OSError:
+    lock = FileLock(_LOCK_FILE)
+    if not lock.acquire():
         print("Другой экземпляр уже запущен, выход.", file=sys.stderr)
         sys.exit(0)
+    return lock
 
 
 def main() -> None:
@@ -83,8 +80,7 @@ def main() -> None:
     finally:
         if liker is not None:
             liker.close()
-        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-        lock.close()
+        lock.release()
 
 
 if __name__ == "__main__":
