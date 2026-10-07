@@ -64,7 +64,7 @@ class VKBrowser:
                     [chrome_path, "--version"],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=15,
                 )
                 version_str = result.stdout.strip().split()[-1]
                 return int(version_str.split(".")[0])
