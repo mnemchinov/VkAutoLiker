@@ -260,3 +260,23 @@ class TestLLMFilterStage:
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == 2
         posts_repo.mark_processed.assert_not_called()
+
+    def test_mark_processed_error_doesnt_crash(self, mock_config, mock_logger):
+        """Ошибка mark_processed (БД заблокирована) — стадия не падает, пост отсеян."""
+        from stages import LLMFilterStage
+
+        posts_repo = MagicMock()
+        posts_repo.mark_processed.side_effect = RuntimeError("database locked")
+        stage = LLMFilterStage(mock_config, mock_logger, posts_repo)
+        posts = [
+            _make_post(1, 1, "политика"),
+            _make_post(2, 2, "нейтральный"),
+        ]
+        ctx = PipelineContext(config=mock_config, posts=posts)
+
+        responses = [_mock_llm_response("SKIP"), _mock_llm_response("OK")]
+        with patch("litellm.completion", side_effect=responses):
+            result = stage.process(ctx)
+
+        assert len(result.posts) == 1
+        assert result.posts[0].owner_id == 2

@@ -326,7 +326,6 @@ class VKBrowser:
                     self._logger.error(
                         f"Не удалось проверить авторизацию после {max_retries} попыток: {e}"
                     )
-                    return False
         return False
 
     def close(self) -> None:

@@ -151,8 +151,8 @@ class BrowserLikesService:
                 ActionChains(driver).move_by_offset(
                     random.randint(-50, 50), random.randint(-30, 30)
                 ).perform()
-            except Exception:
-                pass
+            except Exception as e:
+                self._logger.debug(f"Имитация движения мыши не удалась: {e}")
 
         if random.random() < 0.10:
             extra = random.uniform(

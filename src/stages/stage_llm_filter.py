@@ -44,7 +44,12 @@ class LLMFilterStage:
         for p in ctx.posts:
             try:
                 if self._filter.should_skip(p):
-                    self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                    try:
+                        self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
+                    except Exception as e:
+                        self._logger.warning(
+                            f"Не удалось маркировать пост {p.owner_id}_{p.item_id} как FILTERED: {e}"
+                        )
                 else:
                     kept.append(p)
             except LLMTimeoutError:
