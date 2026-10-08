@@ -211,7 +211,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `log_file` | `VK_LOG_FILE` | `vk_autoliker.log` | Файл логов |
 | `db_path` | `VK_DB_PATH` | `vk_autoliker.db` | Путь к SQLite-базе |
 | `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | Сколько дней не запрашивать закрытые/приватные стены |
-| `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш |
+| `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш при старте и завершении |
 
 ### LLM-фильтрация (опционально, `filter_mode: "llm"`)
 

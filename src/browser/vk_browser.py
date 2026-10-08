@@ -329,11 +329,16 @@ class VKBrowser:
         return False
 
     def close(self) -> None:
-        """Закрывает браузер и освобождает драйвер."""
+        """Закрывает браузер и освобождает драйвер, затем чистит кэш профиля.
+
+        Очистка вызывается после quit(), чтобы Chrome освободил файлы кэша,
+        и зеркалит поведение start() — профиль не растёт между запусками.
+        """
         if self._driver is not None:
             self._driver.quit()
             self._driver = None
             self._logger.info("Браузер закрыт")
+            self._cleanup_profile_cache()
 
     @staticmethod
     def _random_sleep(min_sec: float, max_sec: float) -> None:

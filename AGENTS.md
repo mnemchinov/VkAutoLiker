@@ -248,6 +248,8 @@ pytest -m "not browser and not live"    # базовая страховка по
     (`SingletonLock`, `SingletonCookie`, `SingletonSocket`) и проверяет размер профиля:
     при превышении `profile_max_size_mb` (дефолт 500) чистит кэш-подкаталоги
     (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
+    `VKBrowser.close()` выполняет ту же очистку кэша после `quit()` — профиль не растёт
+    между запусками.
 13. **Клик через ActionChains.** `click_element` использует `move_to_element + pause + click`
     (мышиная траектория), а не синтетический `element.click()`.
 14. **Капча-стоп.** `_detect_captcha()` в `browser_likes.py` проверяет CSS-селектор капчи;
