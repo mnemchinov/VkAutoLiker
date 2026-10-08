@@ -6,6 +6,7 @@ from enum import Enum
 from typing import ClassVar
 
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.remote.webelement import WebElement
 
 from logger import AppLogger
 from post import build_post_url
@@ -60,8 +61,8 @@ class BrowserLikesService:
     def is_liked(self, owner_id: int, item_id: int) -> bool:
         """Проверяет, стоит ли лайк на посте, по aria-label кнопки внутри контейнера поста.
 
-        Utility-метод — в основном цикле run() не вызывается (like() проверяет
-        _check_liked внутри себя), но используется в test().
+        Навигация на пост + проверка без клика. Основной цикл run() использует
+        like(), который проверяет лайк внутри себя и не требует двойной навигации.
         """
         post_url = build_post_url(owner_id, item_id)
         self._browser.navigate(post_url)
@@ -173,7 +174,7 @@ class BrowserLikesService:
                 return True
         return False
 
-    def _find_like_button(self, owner_id: int, item_id: int):
+    def _find_like_button(self, owner_id: int, item_id: int) -> WebElement | None:
         """Находит кнопку лайка внутри контейнера конкретного поста.
 
         VK рендерит каждый пост в контейнер с data-post-id="{owner_id}_{item_id}".
@@ -188,7 +189,7 @@ class BrowserLikesService:
             return elements[0]
         return None
 
-    def _check_liked(self, element) -> bool:
+    def _check_liked(self, element: WebElement) -> bool:
         """True, если aria-label содержит «Убрать» (пост уже лайкнут)."""
         aria = element.get_attribute("aria-label")
         if aria and "Убрать" in aria:

@@ -14,6 +14,7 @@ from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -234,11 +235,11 @@ class VKBrowser:
         except Exception:
             return False
 
-    def find_elements(self, css_selector: str):
+    def find_elements(self, css_selector: str) -> list[WebElement]:
         """Возвращает список элементов по CSS-селектору."""
         return self.driver.find_elements(By.CSS_SELECTOR, css_selector)
 
-    def find_element(self, css_selector: str):
+    def find_element(self, css_selector: str) -> WebElement:
         """Возвращает первый элемент по CSS-селектору."""
         return self.driver.find_element(By.CSS_SELECTOR, css_selector)
 
@@ -254,7 +255,7 @@ class VKBrowser:
             self._logger.debug(f"Клик не удался по '{css_selector}': {e}")
             return False
 
-    def click_element(self, element) -> bool:
+    def click_element(self, element: WebElement) -> bool:
         """Кликает по переданному элементу через ActionChains с движением мыши.
 
         ActionChains генерирует mousemove → mouseover → mousedown → mouseup → click
