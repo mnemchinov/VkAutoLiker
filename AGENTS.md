@@ -57,7 +57,7 @@ src/                   — весь код, плоская структура Б
   stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
-  database.py          — Database: подключение SQLite, context manager
+  database.py          — Database: подключение SQLite
   migrations/          — миграции схемы через PRAGMA user_version (m001–m003)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
   pipeline.py          — Pipeline + PipelineContext + Stage Protocol

@@ -1,7 +1,7 @@
-"""Подключение к SQLite: context manager для управления соединением.
+"""Подключение к SQLite: обёртка над sqlite3.Connection.
 
-Database инкапсулирует sqlite3.Connection и предоставляет контекстный менеджер
-для транзакций. Миграции выполняются отдельно через migrations.run_migrations().
+Database инкапсулирует sqlite3.Connection. Миграции выполняются отдельно
+через migrations.run_migrations().
 """
 
 import sqlite3
@@ -10,13 +10,14 @@ from settings import Settings
 
 
 class Database:
-    """Подключение к SQLite с поддержкой контекстного менеджера.
+    """Подключение к SQLite.
 
     Использование:
         db = Database(config)
         run_migrations(db.conn)
-        with db:
-            db.conn.execute("INSERT ...")
+        db.conn.execute("INSERT ...")
+        db.commit()
+        db.close()
     """
 
     def __init__(self, config: Settings):
@@ -36,14 +37,3 @@ class Database:
         """Закрывает подключение."""
         if self._conn:
             self._conn.close()
-
-    def __enter__(self) -> "Database":
-        """Вход в контекст: ничего не делает (autocommit отключён по умолчанию)."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Выход из контекста: commit при успехе, rollback при ошибке."""
-        if exc_type is None:
-            self._conn.commit()
-        else:
-            self._conn.rollback()
