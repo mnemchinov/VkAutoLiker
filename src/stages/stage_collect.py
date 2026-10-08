@@ -16,7 +16,7 @@ from post import Post, PostStatus
 from post_filter import FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
-from vk_api import VKApiError, VkApiSearchService
+from vk_api import CaptchaError, VKApiError, VkApiSearchService
 
 from .pipeline import PipelineContext
 
@@ -105,6 +105,8 @@ class CollectStage:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_group
                     )
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {screen_name}: {e}")
                     self._walls_repo.mark_wall_closed(owner_id)
@@ -124,6 +126,8 @@ class CollectStage:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_account
                     )
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов пользователя {screen_name}: {e}")
                     self._walls_repo.mark_wall_closed(owner_id)
@@ -133,6 +137,8 @@ class CollectStage:
         if len(all_posts) < enough and self._config.auto_friends and self._config.user_id:
             try:
                 friend_ids = self._search.get_friends(self._config.user_id)
+            except CaptchaError:
+                raise
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список друзей: {e}")
                 friend_ids = []
@@ -155,6 +161,8 @@ class CollectStage:
                         fid, max_posts=self._config.max_posts_per_friend
                     )
                     _accept(posts)
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов друга {fid}: {e}")
                     self._walls_repo.mark_wall_closed(fid)
@@ -163,6 +171,8 @@ class CollectStage:
         if len(all_posts) < enough and self._config.auto_groups and self._config.user_id:
             try:
                 group_ids = self._search.get_groups(self._config.user_id)
+            except CaptchaError:
+                raise
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список групп: {e}")
                 group_ids = []
@@ -185,6 +195,8 @@ class CollectStage:
                         gid, max_posts=self._config.max_posts_per_group
                     )
                     _accept(posts)
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {gid}: {e}")
                     self._walls_repo.mark_wall_closed(gid)

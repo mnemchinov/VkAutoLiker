@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from post import Post
-from vk_api import VkApiSearchService
+from vk_api import CaptchaError, VKApiError, VkApiSearchService
 
 
 class TestVkApiSearchService:
@@ -172,3 +174,31 @@ class TestVkApiSearchService:
         posts = svc.search("test", max_posts=1)
 
         assert posts[0].from_id == 888
+
+    def test_get_wall_posts_reraises_captcha(self, mock_config, mock_logger):
+        """CaptchaError (код 14) от wall.get — пробрасывается, не глотается."""
+        client = MagicMock()
+        client.call.side_effect = CaptchaError("captcha required")
+
+        svc = VkApiSearchService(client, mock_logger)
+        with pytest.raises(CaptchaError):
+            svc.get_wall_posts(-123, max_posts=10)
+
+    def test_get_wall_posts_reraises_access_denied(self, mock_config, mock_logger):
+        """VKApiError с кодом 15 (access denied) — пробрасывается."""
+        client = MagicMock()
+        client.call.side_effect = VKApiError(15, "access denied")
+
+        svc = VkApiSearchService(client, mock_logger)
+        with pytest.raises(VKApiError):
+            svc.get_wall_posts(-123, max_posts=10)
+
+    def test_get_wall_posts_breaks_on_other_error(self, mock_config, mock_logger):
+        """VKApiError с прочими кодами — логируется, возвращается пустой список."""
+        client = MagicMock()
+        client.call.side_effect = VKApiError(1, "unknown error")
+
+        svc = VkApiSearchService(client, mock_logger)
+        posts = svc.get_wall_posts(-123, max_posts=10)
+
+        assert posts == []

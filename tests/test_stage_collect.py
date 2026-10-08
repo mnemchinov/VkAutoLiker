@@ -214,6 +214,43 @@ class TestCollectStage:
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == -222
 
+    def test_captcha_from_wall_get_stops_session(self, collect_stage, mock_config):
+        """CaptchaError от get_wall_posts — пробрасывается, сессия останавливается."""
+        from vk_api import CaptchaError
+
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["group1"]
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = False
+
+        collect_stage._search.resolve_screen_name = MagicMock(return_value=-111)
+        collect_stage._search.get_wall_posts = MagicMock(
+            side_effect=CaptchaError("captcha required")
+        )
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        with pytest.raises(CaptchaError):
+            collect_stage.process(ctx)
+
+    def test_captcha_from_friends_get_stops_session(self, collect_stage, mock_config):
+        """CaptchaError от get_friends — пробрасывается, сессия останавливается."""
+        from vk_api import CaptchaError
+
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+
+        collect_stage._search.get_friends = MagicMock(side_effect=CaptchaError("captcha required"))
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        with pytest.raises(CaptchaError):
+            collect_stage.process(ctx)
+
     def test_dedup_not_here(self, collect_stage, mock_config):
         """CollectStage не дедуплицирует — это работа DedupStage."""
         posts1 = [_make_post(1, 1), _make_post(1, 2)]
