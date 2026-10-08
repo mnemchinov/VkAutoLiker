@@ -124,7 +124,7 @@ class Settings(BaseSettings):
         "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"
     )
     @classmethod
-    def _parse_list_fields(cls, v):
+    def _parse_list_fields(cls, v) -> list[str]:
         """Парсит comma-separated строки из env vars в списки."""
         return _parse_comma_separated(v)
 
