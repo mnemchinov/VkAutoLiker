@@ -5,8 +5,12 @@ auto_friends → auto_groups. Каждый следующий источник �
 если предыдущие не набрали enough постов.
 
 Внутри каждого источника посты перемешиваются (random.shuffle) перед добавлением.
-Фильтрация: structural (days_back + пустой текст) + stop_words (стоп-слова,
-маркировка FILTERED) + PostsRepository (is_processed) + свои посты (from_id).
+Фильтрация: structural (days_back + пустой текст) → PostsRepository (is_processed) →
+stop_words (стоп-слова, маркировка FILTERED) → свои посты (from_id).
+
+is_processed проверяется до stop_words намеренно: уже помеченный FILTERED пост
+не должен повторно доходить до StopWordsFilter и снова маркироваться при следующем
+сборе (в т.ч. вторым источником в той же сессии).
 """
 
 import random
@@ -63,15 +67,19 @@ class CollectStage:
         enough = ctx.target_likes * 2
 
         def _accept(posts: list[Post]) -> None:
-            """Фильтрует построчно: structural → stop_words (FILTERED) → is_processed → свои посты."""
+            """Фильтрует построчно: structural → is_processed → stop_words (FILTERED) → свои посты.
+
+            is_processed проверяется до stop_words: уже помеченный FILTERED пост
+            не должен повторно проходить стоп-слова при следующем сборе.
+            """
             fresh: list[Post] = []
             for p in posts:
                 if self._structural.should_skip(p):
                     continue
+                if self._posts_repo.is_processed(p.owner_id, p.item_id):
+                    continue
                 if self._stop_words is not None and self._stop_words.should_skip(p):
                     self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
-                    continue
-                if self._posts_repo.is_processed(p.owner_id, p.item_id):
                     continue
                 if p.from_id == self._config.user_id:
                     continue
