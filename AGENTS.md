@@ -21,7 +21,9 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `CollectStage (FilterChain: date + empty + stop_words + is_processed + ранний выход)` → `DedupStage (дедупликация)` → `LLMFilterStage (опционально, filter_mode=="llm")` → `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
+`VK API (сбор постов)` → `CollectStage (structural: date + empty → is_processed → stop_words + ранний выход)` → 
+`DedupStage (дедупликация)` → `LLMFilterStage (опционально, filter_mode=="llm")` → 
+`Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
 ### Стек
 
@@ -57,7 +59,7 @@ src/                   — весь код, плоская структура Б
   stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
   vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
   browser_likes.py     — BrowserLikesService: клик по лайку + верификация
-  database.py          — Database: подключение SQLite, context manager
+  database.py          — Database: подключение SQLite
   migrations/          — миграции схемы через PRAGMA user_version (m001–m003)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
   pipeline.py          — Pipeline + PipelineContext + Stage Protocol
@@ -223,10 +225,13 @@ pytest -m "not browser and not live"    # базовая страховка по
    **Jitter выполняется после проверки авторизации:** `is_logged_in()` — до `random.uniform(0, 1800)`,
    чтобы истёкшая сессия не ждала до 30 минут зря.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
-    в `stage_collect.py` проверяет `PostsRepository.is_processed()` после `FilterChain.filter()` и **до**
-   добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
-   необработанные посты, иначе нижестоящие источники пропускались бы зря.
-    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back`, пустой текст и стоп-слова.
+    в `stage_collect.py` проверяет `PostsRepository.is_processed()` **до** проверки стоп-слов
+    и до добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
+    необработанные посты, иначе нижестоящие источники пропускались бы зря.
+    `is_processed` стоит раньше стоп-слов намеренно: уже помеченный `FILTERED` пост не должен
+    повторно доходить до `StopWordsFilter` и снова маркироваться при следующем сборе
+    (в т.ч. вторым источником в той же сессии).
+    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back` и пустой текст.
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
@@ -248,6 +253,8 @@ pytest -m "not browser and not live"    # базовая страховка по
     (`SingletonLock`, `SingletonCookie`, `SingletonSocket`) и проверяет размер профиля:
     при превышении `profile_max_size_mb` (дефолт 500) чистит кэш-подкаталоги
     (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
+    `VKBrowser.close()` выполняет ту же очистку кэша после `quit()` — профиль не растёт
+    между запусками.
 13. **Клик через ActionChains.** `click_element` использует `move_to_element + pause + click`
     (мышиная траектория), а не синтетический `element.click()`.
 14. **Капча-стоп.** `_detect_captcha()` в `browser_likes.py` проверяет CSS-селектор капчи;
@@ -273,7 +280,9 @@ pytest -m "not browser and not live"    # базовая страховка по
     `StopWordsFilter` передаётся в `CollectStage` отдельно от `FilterChain` — отсеянные посты
     маркируются `FILTERED`. `LLMTopicFilter` вызывается только через `LLMFilterStage`.
     `CollectStage._accept()` перебирает посты построчно: structural → continue (без метки),
-    stop_words → `mark_processed(FILTERED)` + continue, `is_processed` → continue, свои посты → continue.
+    `is_processed` → continue, stop_words → `mark_processed(FILTERED)` + continue, свои посты → continue.
+    `is_processed` проверяется раньше стоп-слов: уже помеченный `FILTERED` пост не должен
+    повторно доходить до `StopWordsFilter` и снова маркироваться при следующем сборе.
     **StopWordsFilter** использует `pymorphy3` для лемматизации русских слов: стоп-слово «церковь»
     находит «церковью», «церкви», «церковного». Три группы: `_stop_lemmas` (русские слова через
     лемматизацию), `_stop_substrings` (нерусские/аббревиатуры через substring), `_stop_phrases`

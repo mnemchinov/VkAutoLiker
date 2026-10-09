@@ -5,8 +5,12 @@ auto_friends → auto_groups. Каждый следующий источник �
 если предыдущие не набрали enough постов.
 
 Внутри каждого источника посты перемешиваются (random.shuffle) перед добавлением.
-Фильтрация: structural (days_back + пустой текст) + stop_words (стоп-слова,
-маркировка FILTERED) + PostsRepository (is_processed) + свои посты (from_id).
+Фильтрация: structural (days_back + пустой текст) → PostsRepository (is_processed) →
+stop_words (стоп-слова, маркировка FILTERED) → свои посты (from_id).
+
+is_processed проверяется до stop_words намеренно: уже помеченный FILTERED пост
+не должен повторно доходить до StopWordsFilter и снова маркироваться при следующем
+сборе (в т.ч. вторым источником в той же сессии).
 """
 
 import random
@@ -16,7 +20,7 @@ from post import Post, PostStatus
 from post_filter import FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
-from vk_api import VKApiError, VkApiSearchService
+from vk_api import CaptchaError, VKApiError, VkApiSearchService
 
 from .pipeline import PipelineContext
 
@@ -63,15 +67,19 @@ class CollectStage:
         enough = ctx.target_likes * 2
 
         def _accept(posts: list[Post]) -> None:
-            """Фильтрует построчно: structural → stop_words (FILTERED) → is_processed → свои посты."""
+            """Фильтрует построчно: structural → is_processed → stop_words (FILTERED) → свои посты.
+
+            is_processed проверяется до stop_words: уже помеченный FILTERED пост
+            не должен повторно проходить стоп-слова при следующем сборе.
+            """
             fresh: list[Post] = []
             for p in posts:
                 if self._structural.should_skip(p):
                     continue
+                if self._posts_repo.is_processed(p.owner_id, p.item_id):
+                    continue
                 if self._stop_words is not None and self._stop_words.should_skip(p):
                     self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
-                    continue
-                if self._posts_repo.is_processed(p.owner_id, p.item_id):
                     continue
                 if p.from_id == self._config.user_id:
                     continue
@@ -105,6 +113,8 @@ class CollectStage:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_group
                     )
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {screen_name}: {e}")
                     self._walls_repo.mark_wall_closed(owner_id)
@@ -124,6 +134,8 @@ class CollectStage:
                     posts = self._search.get_wall_posts(
                         owner_id, max_posts=self._config.max_posts_per_account
                     )
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов пользователя {screen_name}: {e}")
                     self._walls_repo.mark_wall_closed(owner_id)
@@ -133,6 +145,8 @@ class CollectStage:
         if len(all_posts) < enough and self._config.auto_friends and self._config.user_id:
             try:
                 friend_ids = self._search.get_friends(self._config.user_id)
+            except CaptchaError:
+                raise
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список друзей: {e}")
                 friend_ids = []
@@ -155,6 +169,8 @@ class CollectStage:
                         fid, max_posts=self._config.max_posts_per_friend
                     )
                     _accept(posts)
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов друга {fid}: {e}")
                     self._walls_repo.mark_wall_closed(fid)
@@ -163,6 +179,8 @@ class CollectStage:
         if len(all_posts) < enough and self._config.auto_groups and self._config.user_id:
             try:
                 group_ids = self._search.get_groups(self._config.user_id)
+            except CaptchaError:
+                raise
             except VKApiError as e:
                 self._logger.warning(f"Не удалось получить список групп: {e}")
                 group_ids = []
@@ -185,6 +203,8 @@ class CollectStage:
                         gid, max_posts=self._config.max_posts_per_group
                     )
                     _accept(posts)
+                except CaptchaError:
+                    raise
                 except VKApiError as e:
                     self._logger.warning(f"Ошибка получения постов группы {gid}: {e}")
                     self._walls_repo.mark_wall_closed(gid)

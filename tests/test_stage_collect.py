@@ -140,6 +140,26 @@ class TestCollectStage:
         assert (1, 2) not in result_ids
         collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
 
+    def test_is_processed_checked_before_stop_words(self, collect_stage, mock_config):
+        """Уже обработанный пост не доходит до stop_words — стоп-слова не вызываются.
+
+        Регрессия: при проверке стоп-слов ДО is_processed пост, помеченный FILTERED,
+        снова доходил до StopWordsFilter и снова маркировался при следующем сборе.
+        """
+        mock_config.queries = ["тест"]
+        processed_post = _make_post(1, 2, "пост про политика")
+        collect_stage._search.search = MagicMock(return_value=[processed_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._posts_repo.is_processed = MagicMock(return_value=True)
+        collect_stage._stop_words.should_skip = MagicMock(return_value=True)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        assert result.posts == []
+        collect_stage._stop_words.should_skip.assert_not_called()
+        collect_stage._posts_repo.mark_processed.assert_not_called()
+
     def test_structural_filter_not_marked(self, collect_stage, mock_config):
         """Пост отсеян structural (дата/пустой текст) → БЕЗ mark_processed."""
         mock_config.queries = ["тест"]
@@ -213,6 +233,43 @@ class TestCollectStage:
 
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == -222
+
+    def test_captcha_from_wall_get_stops_session(self, collect_stage, mock_config):
+        """CaptchaError от get_wall_posts — пробрасывается, сессия останавливается."""
+        from vk_api import CaptchaError
+
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["group1"]
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = False
+
+        collect_stage._search.resolve_screen_name = MagicMock(return_value=-111)
+        collect_stage._search.get_wall_posts = MagicMock(
+            side_effect=CaptchaError("captcha required")
+        )
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        with pytest.raises(CaptchaError):
+            collect_stage.process(ctx)
+
+    def test_captcha_from_friends_get_stops_session(self, collect_stage, mock_config):
+        """CaptchaError от get_friends — пробрасывается, сессия останавливается."""
+        from vk_api import CaptchaError
+
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+
+        collect_stage._search.get_friends = MagicMock(side_effect=CaptchaError("captcha required"))
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        with pytest.raises(CaptchaError):
+            collect_stage.process(ctx)
 
     def test_dedup_not_here(self, collect_stage, mock_config):
         """CollectStage не дедуплицирует — это работа DedupStage."""

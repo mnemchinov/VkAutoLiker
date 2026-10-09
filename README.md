@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-77%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-160%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-76%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -54,8 +54,9 @@
 ```
 VK API (сбор постов)
   → Сбор и фильтрация:
-      ├ отсеиваем: старые, пустые, по стоп-словам (опционально), свои посты
-      ├ пропускаем уже обработанные (SQLite)
+      ├ отсеиваем: старые, пустые, свои посты
+      ├ пропускаем уже обработанные (SQLite) — до проверки стоп-слов
+      ├ отсеиваем по стоп-словам (если включено), помечаем FILTERED
       ├ 6 источников по приоритету (запросы → хештеги → группы → аккаунты → друзья → подписки)
       ├ случайный порядок внутри каждого источника
       ├ ранний выход: набрали достаточно — остальные источники пропускаем
@@ -211,7 +212,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `log_file` | `VK_LOG_FILE` | `vk_autoliker.log` | Файл логов |
 | `db_path` | `VK_DB_PATH` | `vk_autoliker.db` | Путь к SQLite-базе |
 | `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | Сколько дней не запрашивать закрытые/приватные стены |
-| `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш |
+| `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш при старте и завершении |
 
 ### LLM-фильтрация (опционально, `filter_mode: "llm"`)
 
@@ -279,13 +280,16 @@ VK_LLM_SSL_VERIFY=false
 ## Фильтрация
 
 - **Давность:** посты старше `days_back` дней отбрасываются (дата из API)
+- **Уже обработанные:** посты, записанные в SQLite как обработанные, пропускаются.
+  Проверяется **до** стоп-слов, поэтому отсеянный по стоп-словам пост (помеченный `FILTERED`)
+  не проверяется повторно при следующем сборе.
 - **Стоп-слова:** посты, содержащие слова из `stop_words` (inline) и `stop_words_file`
-  (файл), отбрасываются. Списки объединяются. Регистронезависимо. Русские слова проходят
+  (файл), отбрасываются и помечаются `FILTERED`. Списки объединяются. Регистронезависимо.
+  Русские слова проходят
   лемматизацию через `pymorphy3`: стоп-слово «церковь» находит «церковью», «церкви»,
   «церковного». Нерусские слова и аббревиатуры — substring-поиск.
 - **Свои посты:** посты, написанные вашим аккаунтом на чужих стенах, не лайкаются
 - **Дубликаты:** повторяющиеся посты (по паре автор + ID) пропускаются
-- **Уже обработанные:** посты, записанные в SQLite как обработанные, пропускаются
 - **Уже лайкнутые:** проверка в браузере — если лайк уже стоит, пост пропускается
   (ловит посты, лайкнутые вручную вне инструмента)
 - **LLM-фильтрация (опционально):** при `filter_mode: "llm"` посты классифицируются через

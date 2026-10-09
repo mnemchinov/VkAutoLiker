@@ -103,7 +103,7 @@ class MyService:
 | `VkApiSearchService` | `vk_api_search_service.py` | Обёртка над VK API: newsfeed.search, wall.get, friends.get, groups.get |
 | `BrowserLikesService` | `browser_likes.py` | Клик по лайку через Selenium + верификация |
 | `VKBrowser` | `vk_browser.py` | Обёртка над Selenium + антидетект + stale Chrome cleanup |
-| `Database` | `database.py` | Подключение SQLite, context manager |
+| `Database` | `database.py` | Подключение SQLite |
 | `PostsRepository` | `repositories/posts_repository.py` | SQLite: processed_posts (is_processed, mark_processed) |
 | `SessionsRepository` | `repositories/sessions_repository.py` | SQLite: sessions (start/end, статистика) |
 | `WallsRepository` | `repositories/walls_repository.py` | SQLite: closed_walls (кэш закрытых стен) |

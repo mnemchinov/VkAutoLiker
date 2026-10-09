@@ -55,7 +55,7 @@ class VkApiSearchService:
                     },
                 )
             except VKApiError as e:
-                if e.code in (15, 18, 30):
+                if e.code in (14, 15, 18, 30):
                     raise
                 self._logger.warning(f"Ошибка wall.get owner_id={owner_id}: {e}")
                 break
