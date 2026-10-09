@@ -38,9 +38,12 @@ class LLMFilterStage:
 
         При таймауте LLM (LLMTimeoutError) пост пропускается без маркировки —
         попадёт в следующую выборку для повторной проверки.
+        Сводный лог различает «отсеяно» (FILTERED) и «пропущено» (таймаут):
+        пропущенные посты не маркировались и будут перепроверены.
         """
         before = len(ctx.posts)
         kept: list = []
+        skipped = 0
         for p in ctx.posts:
             try:
                 if self._filter.should_skip(p):
@@ -53,8 +56,14 @@ class LLMFilterStage:
                 else:
                     kept.append(p)
             except LLMTimeoutError:
-                continue
+                skipped += 1
         ctx.posts = kept
-        removed = before - len(ctx.posts)
-        self._logger.info(f"LLM-фильтр: {before} → {len(ctx.posts)} постов ({removed} отсеяно)")
+        removed = before - len(kept) - skipped
+        if skipped:
+            self._logger.info(
+                f"LLM-фильтр: {before} → {len(kept)} постов "
+                f"({removed} отсеяно, {skipped} пропущено: таймаут)"
+            )
+        else:
+            self._logger.info(f"LLM-фильтр: {before} → {len(kept)} постов ({removed} отсеяно)")
         return ctx

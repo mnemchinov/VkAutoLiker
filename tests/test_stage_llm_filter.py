@@ -280,3 +280,32 @@ class TestLLMFilterStage:
 
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == 2
+
+    def test_summary_log_distinguishes_timeout_skips(self, mock_config, mock_logger, caplog):
+        """Сводный лог различает «отсеяно» (FILTERED) и «пропущено» (таймаут)."""
+        import logging
+
+        from stages import LLMFilterStage
+
+        stage = LLMFilterStage(mock_config, mock_logger, MagicMock())
+        posts = [
+            _make_post(1, 1, "политика"),
+            _make_post(2, 2, "таймаут"),
+            _make_post(3, 3, "нейтральный"),
+        ]
+        ctx = PipelineContext(config=mock_config, posts=posts)
+
+        responses = [
+            _mock_llm_response("SKIP"),
+            litellm.Timeout("timeout", model="test", llm_provider="openai"),
+            _mock_llm_response("OK"),
+        ]
+        with (
+            patch("litellm.completion", side_effect=responses),
+            caplog.at_level(logging.INFO, logger="vk_autoliker"),
+        ):
+            result = stage.process(ctx)
+
+        assert len(result.posts) == 1
+        assert result.posts[0].owner_id == 3
+        assert "LLM-фильтр: 3 → 1 постов (1 отсеяно, 1 пропущено: таймаут)" in caplog.text
