@@ -140,6 +140,26 @@ class TestCollectStage:
         assert (1, 2) not in result_ids
         collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
 
+    def test_is_processed_checked_before_stop_words(self, collect_stage, mock_config):
+        """Уже обработанный пост не доходит до stop_words — стоп-слова не вызываются.
+
+        Регрессия: при проверке стоп-слов ДО is_processed пост, помеченный FILTERED,
+        снова доходил до StopWordsFilter и снова маркировался при следующем сборе.
+        """
+        mock_config.queries = ["тест"]
+        processed_post = _make_post(1, 2, "пост про политика")
+        collect_stage._search.search = MagicMock(return_value=[processed_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._posts_repo.is_processed = MagicMock(return_value=True)
+        collect_stage._stop_words.should_skip = MagicMock(return_value=True)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        assert result.posts == []
+        collect_stage._stop_words.should_skip.assert_not_called()
+        collect_stage._posts_repo.mark_processed.assert_not_called()
+
     def test_structural_filter_not_marked(self, collect_stage, mock_config):
         """Пост отсеян structural (дата/пустой текст) → БЕЗ mark_processed."""
         mock_config.queries = ["тест"]
