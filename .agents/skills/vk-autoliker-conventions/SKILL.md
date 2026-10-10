@@ -12,7 +12,7 @@ description: Перед любой правкой в src/ или создани�
 - Правка `settings.py`
 - Работа с VK API, Selenium, SQLite, браузерными селекторами
 
-## 12 критичных инвариантов (не ломать)
+## 15 критичных инвариантов (не ломать)
 
 ### 1. Рандомизация всех пауз
 
@@ -21,6 +21,7 @@ description: Перед любой правкой в src/ или создани�
 
 Исключения (явно обоснованные):
 - `time.sleep(1)` при ретрае ошибки 6
+- `time.sleep(5.0)` при сетевом ретрае в `VKApiClient.call()`
 - `random.uniform(1, 3)` после клика
 - `random.uniform(55, 65)` при сетевом ретрае в `is_logged_in()` (был `time.sleep(60)`,
   исправлено для соблюдения инварианта)
@@ -52,8 +53,12 @@ VK — React-приложение. После клика `aria-label` меняе
 
 ### 5. Дедупликация по паре `(owner_id, item_id)`
 
-Первичный ключ в `processed_posts` и `INSERT OR IGNORE`. Пост помечается обработанным
-и при успехе, и при провале, и при исключении — чтобы не долбить один пост бесконечно.
+Первичный ключ в `processed_posts` и `INSERT OR REPLACE`. Помечаются:
+успешный лайк (`status=LIKED`) и отфильтрованный пост (`status=FILTERED`).
+Провальные попытки (капча, FAILED, исключение) и LLM-таймаут НЕ пишутся в
+БД — пост повторяется в следующей сессии. Крах браузера
+(`WebDriverException`/`InvalidSessionIdException`) — `break` без
+`mark_processed`.
 
 ### 6. `owner_id` для групп отрицательный
 
@@ -73,9 +78,11 @@ VK — React-приложение. После клика `aria-label` меняе
 
 ### 9. `is_processed` фильтруется при сборе
 
-`_collect_posts()` в `liker.py` проверяет `PostsRepository.is_processed()` после
-`FilterChain.filter()` и **до** добавления в `all_posts`. Ранний выход
-`enough = target_likes * 2` считает только необработанные посты.
+`CollectStage._accept()` в `stages/stage_collect.py` проверяет
+`PostsRepository.is_processed()` до стоп-слов и **до** добавления в
+`all_posts`. Ранний выход `enough = target_likes * 2` считает только
+необработанные посты. `is_processed` стоит раньше стоп-слов намеренно: уже
+помеченный `FILTERED` пост не должен повторно доходить до `StopWordsFilter`.
 
 ### 10. Друзья и группы перемешиваются, итерируются до early-exit или safety-капа
 
@@ -98,7 +105,45 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 ### 12. Stale Chrome cleanup перед стартом
 
 `VKBrowser.start()` завершает процессы Chrome, использующие `chrome_profile/`
-(через `pgrep` + `SIGTERM`), иначе `SessionNotCreatedException`.
+(через `pgrep` + `SIGTERM`), удаляет lock-файлы (`Singleton*`) и при
+превышении `profile_max_size_mb` чистит кэш-подкаталоги `Default/Cache`,
+`Default/Code Cache`, `Default/GPUCache`, иначе `SessionNotCreatedException`.
+`VKBrowser.close()` делает ту же очистку после `quit()`.
+
+### 13. Конвейер фильтрации (`filter_mode`)
+
+Три режима: `stop_words` (дефолт), `review`, `llm`.
+
+- Словарь `stop_words.txt`: `!` в конце слова = жёсткое, без `!` = мягкое
+  (роль — в самом слове; inline `VK_STOP_WORDS` — тот же парсер).
+- `StopWordsFilter.matched(post) → StopMatch(words, hard)`: русские слова —
+  леммы через pymorphy3, фразы/аббревиатуры — substring.
+- `stop_words`: hard → `mark_processed(FILTERED)` при сборе; мягкие
+  проходят; LLM не участвует.
+- `review`: любое совпадение помечает пост (`PostReview` SOFT/HARD + леммы
+  в `review_words`), пост остаётся в пуле; `LLMFilterStage` арбитражет
+  только помеченные — единый путь: SKIP → FILTERED, OK → лайк, таймаут →
+  непомеченный (повторится в следующей сессии), ошибка LLM → fail-open.
+- `llm`: словарь не загружается, LLM проверяет все посты по темам
+  `llm_stop_topics`.
+- `review`/`llm` без обеих `VK_LLM_MODEL` + `VK_LLM_API_KEY` — ошибка
+  валидации при старте (в `stop_words` полуконфигурация LLM не ошибка).
+
+### 14. Кэш закрытых стен
+
+Перед `wall.get` — проверка `ClosedWallsRepository.is_wall_closed(owner_id)`.
+Ошибки VK 15/18/30 — `mark_wall_closed`, TTL — `closed_wall_ttl_days` (7).
+Экономит ~36% API-вызовов. `CaptchaError` (код 14) НЕ кэшируется —
+ре-рейзит наверх (капча-стоп), поэтому `except CaptchaError` в
+`stage_collect.py` стоит **перед** `except VKApiError`.
+
+### 15. Эффективный лимит и честные логи
+
+Лимит цикла лайков — `min(target, len(pool))`: пул меньше цели — штатный
+исход, не провал («Лайкнут (9/9)»). Лог-строки не должны врать: пауза
+«перед следующим постом» — только когда следующий пост реально есть;
+досрочное завершение — с причиной; сводки различают категории («отсеяно» /
+«пропущено: таймаут»).
 
 ## Сеть и ретраи
 

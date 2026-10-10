@@ -23,10 +23,10 @@ description: Перед написанием или правкой тестов.
 | `TestVkApiSearchService` | `test_vk_api_search_service.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
 | `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain` | `test_post_filter.py` | days_back, пустой текст, стоп-слова, композит |
 | `TestLLMTopicFilter`, `TestLLMFilterStage` | `test_stage_llm_filter.py` | LLM-фильтрация: мок litellm, fallback, stage |
-| `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии) |
+| `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_closed_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии, closed-walls кэш) |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
 | `TestVKBrowserIsLoggedIn` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай |
-| `TestAutoLiker` | `test_liker.py` | _collect_posts, приоритет источников, early-exit, цикл лайков |
+| `TestRun`, `TestPipelineComposition` | `test_liker.py` | цикл лайков (эффективный лимит, паузы, досрочное завершение), состав pipeline по `filter_mode` |
 
 ## Моки вместо сети и браузера
 
@@ -41,25 +41,25 @@ from unittest.mock import MagicMock, patch
 
 # Для AutoLiker: создаём реальный объект, подменяем зависимости
 liker = AutoLiker(mock_config, mock_logger)
-liker._search_service = MagicMock()
-liker._likes_service = MagicMock()
-liker._state = MagicMock()
-liker._filter = MagicMock()
+liker._pipeline = MagicMock()
 liker._browser = MagicMock()
+liker._likes_service = MagicMock()
+liker._sessions_repo = MagicMock()
+liker._posts_repo = MagicMock()
 ```
 
 ### patch для HTTP и sleep
 
 ```python
-@patch("vk_api_client.requests.get")
-@patch("vk_api_client.time.sleep")
+@patch("vk_api.vk_api_client.requests.get")
+@patch("vk_api.vk_api_client.time.sleep")
 def test_something(mock_sleep, mock_get):
     mock_get.return_value.json.return_value = {"response": {...}}
     # mock_sleep — тесты не спят
 ```
 
 ```python
-@patch("vk_browser.time.sleep")
+@patch("browser.vk_browser.time.sleep")
 def test_browser_method(mock_sleep):
     # браузерные задержки не тормозят тесты
 ```
@@ -70,10 +70,10 @@ def test_browser_method(mock_sleep):
 
 | Фикстура | Назначение |
 |---|---|
+| `_clean_vk_env` | autouse: чистит `VK_*` из `os.environ` перед каждым тестом — `litellm` грузит `.env` при импорте, тесты не должны зависеть от его содержимого |
 | `mock_config_data` | Словарь с конфигурацией (Python dict) |
-| `mock_config_file` | Временный YAML-файл с конфигурацией |
 | `mock_config` | `Settings` instance, готовый к использованию |
-| `mock_logger` | `MagicMock` логгера |
+| `mock_logger` | **Реальный** логгер (не `MagicMock`) — проверка лог-вывода через `caplog` |
 | `mock_driver` | `MagicMock` Selenium WebDriver |
 | `tmp_db_path` | Путь к временной SQLite-БД (через `tmp_path`) |
 | `http_fixture_server` | Локальный `http.server` на `tests/fixtures/` |
@@ -120,9 +120,16 @@ def test_something(tmp_db_path):
 `tests/fixtures/vk_post.html` повторяет разметку кнопки лайка. **При изменении
 DOM-селекторов — обновлять фиксут** и прогонять `pytest -m browser`.
 
-### Язык
+### Логи — caplog
 
-Логи и ассерты в тестах — на русском (соответствует #338).
+`mock_logger` — реальный логгер, а не `MagicMock`: проверять лог-вывод —
+поиск строки в `caplog.text`, а не `mock_logger.info.assert_called_with(...)`
+(второе никогда не проходит). Проверяемые строки логов — на русском.
+
+### Реальный инцидент → регрессионный тест
+
+Каждый реальный инцидент (пробой фильтра, краш, ложный лог) закрепляется
+тестом на точных данных инцидента (например, текст поста-пробоя).
 
 ### Импорты
 
@@ -137,15 +144,20 @@ DOM-селекторов — обновлять фиксут** и прогоня
 pytest -m "not browser and not live" --cov=src --cov-report=term-missing
 ```
 
-Цель: ≥70%. Текущий эталон — 71% (61 тест).
+Цель: ≥70%. Текущий эталон — 81% (189 тестов).
 
-## Паттерны тестирования AutoLiker
+## Паттерны тестирования AutoLiker и stages
 
-`AutoLiker` — оркестратор, его тесты проверяют бизнес-логику:
+`AutoLiker` — оркестратор: сбор постов — в `CollectStage` (`stages/`),
+цикл лайков — в `run()`.
 
-- **`_collect_posts`** — мокаю `_search_service` методы (`search_posts`, `get_wall_posts`,
-  `get_friends`, `get_groups`), `_state.is_processed` → `False`, `_filter.filter` → pass-through.
-  Проверяю: приоритет источников, early-exit на `enough`, дедупликация, shuffle.
-- **`run`** — мокаю `_collect_posts` напрямую (чтобы вернуть список `Post`), `_browser`
-  и `_likes_service` — моки. Проверяю: daily limit, like success count, already-liked skip,
-  exception → continue, likes_per_session_min/max limit.
+- **`CollectStage`** — мокаю методы `VKApiSearchService` (`search_posts`,
+  `get_wall_posts`, `get_friends`, `get_groups`) и `PostsRepository`
+  (`is_processed` → `False`). Проверяю: приоритет источников, early-exit на
+  `enough`, `is_processed` раньше стоп-слов, shuffle, маркировку по режиму
+  (`stop_words`: hard → FILTERED; `review`: метка SOFT/HARD + пост в пуле).
+- **`run`** — мокаю `_pipeline` (`.run` → `PipelineContext`), `_browser`,
+  `_likes_service`, `_sessions_repo`, `_posts_repo`. Проверяю: эффективный
+  лимит `min(target, pool)`, пауза только перед реально существующим
+  следующим постом, досрочное завершение с причиной, daily limit,
+  like success count, already-liked skip, exception → continue.
