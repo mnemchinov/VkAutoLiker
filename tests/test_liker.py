@@ -380,3 +380,45 @@ class TestRun:
         # Проверяем, что хотя бы один sleep был >= 60 сек (burst pause)
         long_pauses = [call for call in mock_sleep.call_args_list if call.args[0] >= 60]
         assert len(long_pauses) > 0
+
+
+class TestPipelineComposition:
+    """Композиция pipeline-стадий по filter_mode."""
+
+    def _stages(self, mock_config_data, monkeypatch, **overrides):
+        """Собирает AutoLiker и возвращает типы стадий до замены pipeline на мок."""
+        from liker import AutoLiker
+        from settings import Settings
+
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        config = Settings(_env_file=None, **{**mock_config_data, **overrides})
+        obj = AutoLiker(config, MagicMock())
+        try:
+            return [type(st) for st in obj._pipeline._stages]
+        finally:
+            obj._db.close()
+
+    def test_stop_words_mode_two_stages(self, mock_config_data, monkeypatch):
+        """stop_words: CollectStage + DedupStage, без LLMFilterStage."""
+        from stages import CollectStage, DedupStage
+
+        stages = self._stages(mock_config_data, monkeypatch)
+
+        assert stages == [CollectStage, DedupStage]
+
+    def test_review_mode_three_stages(self, mock_config_data, monkeypatch):
+        """review: CollectStage + DedupStage + LLMFilterStage."""
+        from stages import CollectStage, DedupStage, LLMFilterStage
+
+        stages = self._stages(mock_config_data, monkeypatch, filter_mode="review")
+
+        assert stages == [CollectStage, DedupStage, LLMFilterStage]
+
+    def test_llm_mode_three_stages(self, mock_config_data, monkeypatch):
+        """llm: CollectStage + DedupStage + LLMFilterStage."""
+        from stages import CollectStage, DedupStage, LLMFilterStage
+
+        stages = self._stages(mock_config_data, monkeypatch, filter_mode="llm")
+
+        assert stages == [CollectStage, DedupStage, LLMFilterStage]

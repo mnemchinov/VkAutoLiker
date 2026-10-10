@@ -6,7 +6,8 @@ auto_friends → auto_groups. Каждый следующий источник �
 
 Внутри каждого источника посты перемешиваются (random.shuffle) перед добавлением.
 Фильтрация: structural (days_back + пустой текст) → PostsRepository (is_processed) →
-stop_words (стоп-слова, маркировка FILTERED) → свои посты (from_id).
+stop_words (жёсткое '!' → FILTERED; режим review → метка для LLM-арбитража) →
+свои посты (from_id).
 
 is_processed проверяется до stop_words намеренно: уже помеченный FILTERED пост
 не должен повторно доходить до StopWordsFilter и снова маркироваться при следующем
@@ -16,7 +17,7 @@ is_processed проверяется до stop_words намеренно: уже �
 import random
 
 from logger import AppLogger
-from post import Post, PostStatus
+from post import Post, PostReview, PostStatus
 from post_filter import FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
@@ -67,10 +68,13 @@ class CollectStage:
         enough = ctx.target_likes * 2
 
         def _accept(posts: list[Post]) -> None:
-            """Фильтрует построчно: structural → is_processed → stop_words (FILTERED) → свои посты.
+            """Фильтрует построчно: structural → is_processed → stop_words → свои посты.
 
             is_processed проверяется до stop_words: уже помеченный FILTERED пост
             не должен повторно проходить стоп-слова при следующем сборе.
+            Жёсткое слово ('!') — пост отсекается (FILTERED). В режиме review
+            любое совпадение помечает пост (review + review_words) для
+            LLM-арбитража, пост остаётся в пуле.
             """
             fresh: list[Post] = []
             for p in posts:
@@ -78,9 +82,17 @@ class CollectStage:
                     continue
                 if self._posts_repo.is_processed(p.owner_id, p.item_id):
                     continue
-                if self._stop_words is not None and self._stop_words.should_skip(p):
-                    self._posts_repo.mark_processed(p.owner_id, p.item_id, PostStatus.FILTERED)
-                    continue
+                if self._stop_words is not None:
+                    m = self._stop_words.matched(p)
+                    if m is not None:
+                        if self._config.filter_mode == "review":
+                            p.review = PostReview.HARD if m.hard else PostReview.SOFT
+                            p.review_words = m.words
+                        elif m.hard:
+                            self._posts_repo.mark_processed(
+                                p.owner_id, p.item_id, PostStatus.FILTERED
+                            )
+                            continue
                 if p.from_id == self._config.user_id:
                     continue
                 fresh.append(p)

@@ -8,7 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from post import Post, PostStatus, build_post_url
+from post import Post, PostReview, PostStatus, build_post_url
+from post_filter import StopMatch
 from stages import CollectStage, PipelineContext
 
 
@@ -36,7 +37,7 @@ def collect_stage(mock_config, mock_logger):
     structural.should_skip = MagicMock(return_value=False)
     structural.log_summaries = MagicMock()
     stop_words = MagicMock()
-    stop_words.should_skip = MagicMock(return_value=False)
+    stop_words.matched = MagicMock(return_value=None)
     stop_words.log_summary = MagicMock()
 
     return CollectStage(
@@ -121,15 +122,17 @@ class TestCollectStage:
         assert (1, 1) in result_ids
         assert (1, 3) in result_ids
 
-    def test_stop_words_marked_filtered(self, collect_stage, mock_config):
-        """Пост отсеян стоп-словами → mark_processed(FILTERED), не повторится."""
+    def test_hard_stop_word_filters_post(self, collect_stage, mock_config):
+        """Жёсткое стоп-слово (stop_words-режим) → mark_processed(FILTERED), не повторится."""
         mock_config.queries = ["тест"]
         good_post = _make_post(1, 1, "хороший пост")
         bad_post = _make_post(1, 2, "пост про политика")
         collect_stage._search.search = MagicMock(return_value=[good_post, bad_post])
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
-        collect_stage._stop_words.should_skip = MagicMock(
-            side_effect=lambda p: "политика" in p.text
+        collect_stage._stop_words.matched = MagicMock(
+            side_effect=lambda p: StopMatch(words=["политика"], hard=True)
+            if "политика" in p.text
+            else None
         )
 
         ctx = PipelineContext(config=mock_config, target_likes=5)
@@ -139,6 +142,42 @@ class TestCollectStage:
         assert (1, 1) in result_ids
         assert (1, 2) not in result_ids
         collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
+
+    def test_soft_stop_word_passes(self, collect_stage, mock_config):
+        """Мягкое стоп-слово (stop_words-режим) — пост проходит, без маркировки."""
+        mock_config.queries = ["тест"]
+        soft_post = _make_post(1, 2, "пост про карабин")
+        collect_stage._search.search = MagicMock(return_value=[soft_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._stop_words.matched = MagicMock(
+            return_value=StopMatch(words=["карабин"], hard=False)
+        )
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        result_ids = [(p.owner_id, p.item_id) for p in result.posts]
+        assert (1, 2) in result_ids
+        collect_stage._posts_repo.mark_processed.assert_not_called()
+
+    def test_review_mode_marks_post(self, collect_stage, mock_config):
+        """review-режим: совпадение помечает пост (review + review_words), без mark_processed."""
+        mock_config.queries = ["тест"]
+        mock_config.filter_mode = "review"
+        marked_post = _make_post(1, 2, "пост про карабин")
+        collect_stage._search.search = MagicMock(return_value=[marked_post])
+        collect_stage._search.search_hashtag = MagicMock(return_value=[])
+        collect_stage._stop_words.matched = MagicMock(
+            return_value=StopMatch(words=["карабин"], hard=False)
+        )
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = collect_stage.process(ctx)
+
+        assert len(result.posts) == 1
+        assert result.posts[0].review == PostReview.SOFT
+        assert result.posts[0].review_words == ["карабин"]
+        collect_stage._posts_repo.mark_processed.assert_not_called()
 
     def test_is_processed_checked_before_stop_words(self, collect_stage, mock_config):
         """Уже обработанный пост не доходит до stop_words — стоп-слова не вызываются.
@@ -151,13 +190,15 @@ class TestCollectStage:
         collect_stage._search.search = MagicMock(return_value=[processed_post])
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
         collect_stage._posts_repo.is_processed = MagicMock(return_value=True)
-        collect_stage._stop_words.should_skip = MagicMock(return_value=True)
+        collect_stage._stop_words.matched = MagicMock(
+            return_value=StopMatch(words=["политика"], hard=True)
+        )
 
         ctx = PipelineContext(config=mock_config, target_likes=5)
         result = collect_stage.process(ctx)
 
         assert result.posts == []
-        collect_stage._stop_words.should_skip.assert_not_called()
+        collect_stage._stop_words.matched.assert_not_called()
         collect_stage._posts_repo.mark_processed.assert_not_called()
 
     def test_structural_filter_not_marked(self, collect_stage, mock_config):

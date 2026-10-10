@@ -71,7 +71,7 @@ class TestStopWordsFilter:
     def test_stop_words_file_loaded(self, mock_config, mock_logger, tmp_path):
         """Стоп-слова загружаются из файла и применяются."""
         sw_file = tmp_path / "stop.txt"
-        sw_file.write_text("# Комментарий\n\nнаркотики\n\nказино\n", encoding="utf-8")
+        sw_file.write_text("# Комментарий\n\nнаркотики!\n\nказино!\n", encoding="utf-8")
 
         mock_config.stop_words = []
         mock_config.stop_words_file = str(sw_file)
@@ -83,7 +83,7 @@ class TestStopWordsFilter:
 
     def test_stop_words_file_not_found(self, mock_config, mock_logger):
         """Отсутствующий файл стоп-слов — warning, работа продолжается."""
-        mock_config.stop_words = ["спам"]
+        mock_config.stop_words = ["спам!"]
         mock_config.stop_words_file = "/nonexistent/stop_words.txt"
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -93,9 +93,9 @@ class TestStopWordsFilter:
     def test_stop_words_file_and_inline_merged(self, mock_config, mock_logger, tmp_path):
         """Стоп-слова из файла и inline-списка объединяются."""
         sw_file = tmp_path / "stop.txt"
-        sw_file.write_text("казино\n", encoding="utf-8")
+        sw_file.write_text("казино!\n", encoding="utf-8")
 
-        mock_config.stop_words = ["политика"]
+        mock_config.stop_words = ["политика!"]
         mock_config.stop_words_file = str(sw_file)
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -106,7 +106,7 @@ class TestStopWordsFilter:
     def test_stop_words_file_comments_ignored(self, mock_config, mock_logger, tmp_path):
         """Комментарии (#+) и пустые строки в файле игнорируются."""
         sw_file = tmp_path / "stop.txt"
-        sw_file.write_text("# заголовок\n\nполитика\n  # ещё комментарий\n\n", encoding="utf-8")
+        sw_file.write_text("# заголовок\n\nполитика!\n  # ещё комментарий\n\n", encoding="utf-8")
 
         mock_config.stop_words = []
         mock_config.stop_words_file = str(sw_file)
@@ -117,7 +117,7 @@ class TestStopWordsFilter:
 
     def test_lemmatization_matches_word_forms(self, mock_config, mock_logger):
         """Лемматизация находит стоп-слово в любой форме («церковью» → «церковь»)."""
-        mock_config.stop_words = ["церковь"]
+        mock_config.stop_words = ["церковь!"]
         mock_config.stop_words_file = ""
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -127,7 +127,7 @@ class TestStopWordsFilter:
 
     def test_substring_matches_non_russian(self, mock_config, mock_logger):
         """Нерусские слова и аббревиатуры — substring-поиск («18+», «СВО»)."""
-        mock_config.stop_words = ["18+", "СВО", "vape"]
+        mock_config.stop_words = ["18+!", "СВО!", "vape!"]
         mock_config.stop_words_file = ""
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -138,7 +138,7 @@ class TestStopWordsFilter:
 
     def test_multi_word_phrase_matches(self, mock_config, mock_logger):
         """Многословные фразы — substring-поиск («игровые автоматы»)."""
-        mock_config.stop_words = ["игровые автоматы"]
+        mock_config.stop_words = ["игровые автоматы!"]
         mock_config.stop_words_file = ""
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -148,7 +148,7 @@ class TestStopWordsFilter:
 
     def test_lemmatization_no_false_positive(self, mock_config, mock_logger):
         """Слово с другой леммой не вызывает ложного срабатывания."""
-        mock_config.stop_words = ["политика"]
+        mock_config.stop_words = ["политика!"]
         mock_config.stop_words_file = ""
         f = StopWordsFilter(mock_config, mock_logger)
 
@@ -156,6 +156,95 @@ class TestStopWordsFilter:
         assert f.should_skip(make_post(1, 1, "политический анализ")) is False
         # «политику» — винительный падеж, лемма «политика» — совпадает
         assert f.should_skip(make_post(1, 1, "обсуждаем политику")) is True
+
+    def test_soft_word_not_skipped(self, mock_config, mock_logger):
+        """Мягкое слово (без '!') не отсеивает — только помечает."""
+        mock_config.stop_words = ["карабин"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.should_skip(make_post(1, 1, "новое карабин на поводок")) is False
+
+    def test_hard_word_skipped(self, mock_config, mock_logger):
+        """Жёсткое слово (с '!') отсеивает."""
+        mock_config.stop_words = ["карабин!"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.should_skip(make_post(1, 1, "куплю карабин")) is True
+
+    def test_matched_soft(self, mock_config, mock_logger):
+        """matched() — StopMatch с hard=False для мягкого слова."""
+        mock_config.stop_words = ["карабин"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        m = f.matched(make_post(1, 1, "новое карабин на поводок"))
+        assert m is not None
+        assert m.hard is False
+        assert "карабин" in m.words
+
+    def test_matched_mixed_is_hard(self, mock_config, mock_logger):
+        """Смешанное совпадение (жёсткое + мягкое) — hard."""
+        mock_config.stop_words = ["наркотики!", "карабин"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        m = f.matched(make_post(1, 1, "карабин наркотики"))
+        assert m is not None
+        assert m.hard is True
+        # pymorphy3 лемматизирует «наркотики» → «наркотик» (лемма словаря)
+        assert set(m.words) == {"карабин", "наркотик"}
+
+    def test_matched_substring_and_phrase(self, mock_config, mock_logger):
+        """matched() находит substring-слова и фразы."""
+        mock_config.stop_words = ["18+!", "игровые автоматы"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        m = f.matched(make_post(1, 1, "контент 18+ и игровые автоматы"))
+        assert m is not None
+        assert m.hard is True
+        assert set(m.words) == {"18+", "игровые автоматы"}
+
+    def test_matched_none(self, mock_config, mock_logger):
+        """Без совпадений — None."""
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        assert f.matched(make_post(1, 1, "обычный пост")) is None
+
+    def test_summary_stop_words_mode(self, mock_config, mock_logger, caplog):
+        """Сводка в stop_words-режиме: проверено / отсеяно (hard) / процент."""
+        import logging
+
+        mock_config.stop_words = ["наркотики!", "карабин"]
+        mock_config.stop_words_file = ""
+        f = StopWordsFilter(mock_config, mock_logger)
+        f.matched(make_post(1, 1, "наркотики"))
+        f.matched(make_post(2, 2, "карабин"))
+        f.matched(make_post(3, 3, "чисто"))
+
+        with caplog.at_level(logging.INFO, logger="vk_autoliker"):
+            f.log_summary()
+
+        assert "Стоп-слова: проверено 3, отсеяно 1 (33.3%)" in caplog.text
+
+    def test_summary_review_mode(self, mock_config, mock_logger, caplog):
+        """Сводка в review-режиме: проверено / помечено для LLM."""
+        import logging
+
+        mock_config.stop_words = ["наркотики!", "карабин"]
+        mock_config.stop_words_file = ""
+        mock_config.filter_mode = "review"
+        f = StopWordsFilter(mock_config, mock_logger)
+        f.matched(make_post(1, 1, "наркотики"))
+        f.matched(make_post(2, 2, "карабин"))
+        f.matched(make_post(3, 3, "чисто"))
+
+        with caplog.at_level(logging.INFO, logger="vk_autoliker"):
+            f.log_summary()
+
+        assert "Стоп-слова: проверено 3, помечено 2 для LLM" in caplog.text
 
 
 class TestFilterChain:

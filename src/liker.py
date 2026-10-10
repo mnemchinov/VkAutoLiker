@@ -1,8 +1,11 @@
 """Оркестратор: сбор постов через Pipeline → лайки через браузер.
 
 Конвейер (Pipeline) обрабатывает посты через стадии:
-CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп).
-При filter_mode=="llm" добавляется LLMFilterStage (после дедупликации).
+CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп)
+→ LLMFilterStage (только в режимах review/llm, после дедупликации).
+StopWordsFilter подключается в режимах stop_words/review: жёсткое слово ('!')
+отсекает пост в stop_words, в review любое совпадение помечает пост для
+LLM-арбитража.
 AutoLiker создаёт Pipeline в конструкторе и вызывает его в run().
 """
 
@@ -45,7 +48,9 @@ class AutoLiker:
         self._sessions_repo = SessionsRepository(self._db)
         self._walls_repo = ClosedWallsRepository(self._db, config)
         structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
-        stop_words = StopWordsFilter(config, logger) if config.filter_mode == "stop_words" else None
+        stop_words = None
+        if config.filter_mode in ("stop_words", "review"):
+            stop_words = StopWordsFilter(config, logger)
         stages: list = [
             CollectStage(
                 self._search_service,
@@ -58,7 +63,7 @@ class AutoLiker:
             ),
             DedupStage(),
         ]
-        if config.filter_mode == "llm":
+        if config.filter_mode in ("review", "llm"):
             stages.append(LLMFilterStage(config, logger, self._posts_repo))
         self._pipeline = Pipeline(stages)
 

@@ -5,7 +5,8 @@ True — отсеять пост, False — оставить.
 
 FilterChain объединяет structural-фильтры (date, empty) и применяется
 в CollectStage._accept(). StopWordsFilter передаётся в CollectStage
-отдельно — отсеянные посты маркируются FILTERED.
+отдельно: жёсткое слово ('!') отсекает пост, мягкое — помечает для
+LLM-арбитража (matched() → StopMatch).
 
 LLMTopicFilter реализует протокол, но НЕ входит в FilterChain —
 вызывается через LLMFilterStage после DedupStage (стоимость вызова).
@@ -16,7 +17,7 @@ from .empty_text_filter import EmptyTextFilter
 from .filter_chain import FilterChain
 from .llm_topic_filter import LLMTimeoutError, LLMTopicFilter
 from .protocol import PostFilterProtocol
-from .stop_words_filter import StopWordsFilter
+from .stop_words_filter import StopMatch, StopWordsFilter
 
 __all__ = [
     "DateFilter",
@@ -25,5 +26,6 @@ __all__ = [
     "LLMTimeoutError",
     "LLMTopicFilter",
     "PostFilterProtocol",
+    "StopMatch",
     "StopWordsFilter",
 ]
