@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-164%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-185%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-81%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -56,13 +56,14 @@ VK API (сбор постов)
   → Сбор и фильтрация:
       ├ отсеиваем: старые, пустые, свои посты
       ├ пропускаем уже обработанные (SQLite) — до проверки стоп-слов
-      ├ отсеиваем по стоп-словам (если включено), помечаем FILTERED
+      ├ стоп-слова: жёсткие (с '!') — отсев и пометка FILTERED;
+      │   мягкие (без '!') — в режиме review пометка поста для LLM-арбитража
       ├ 6 источников по приоритету (запросы → хештеги → группы → аккаунты → друзья → подписки)
       ├ случайный порядок внутри каждого источника
       ├ ранний выход: набрали достаточно — остальные источники пропускаем
       └ закрытые/приватные стены запоминаем и больше не запрашиваем (N дней)
   → Дедупликация (по автору + ID поста)
-  → LLM-фильтрация (опционально)
+  → LLM (режимы review/llm): review — арбитраж только помеченных, llm — все посты
   → Selenium (навигация → «чтение» → клик по лайку)
   → проверка в браузере, стоит ли уже лайк → запись в SQLite
 ```
@@ -97,8 +98,11 @@ VK_USER_ID=12345678                     # ваш VK ID (числовой)
 VK_HASHTAGS=#вашХештег,#другойХештег    # через запятую (необязательно)
 VK_AUTO_FRIENDS=true                    # собирать посты со стен друзей
 VK_AUTO_GROUPS=true                     # собирать посты со стен подписок
-VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: llm
+VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: review или llm
 ```
+
+Полный список всех 46 параметров со значениями по умолчанию — в `.env.example`
+(документация, в репозитории): можно скопировать в `.env` и менять только нужное.
 
 ### Первичный вход в VK
 
@@ -185,9 +189,9 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `min_friends_to_poll` | `VK_MIN_FRIENDS_TO_POLL` | `20` | — | Минимум друзей для опроса до раннего выхода по `enough` |
 | `max_groups_to_collect` | `VK_MAX_GROUPS_TO_COLLECT` | `200` | — | Макс. число API-вызовов `wall.get` к группам (из всех, случайно) |
 | `days_back` | `VK_DAYS_BACK` | `30` | — | Не лайкать посты старше N дней |
-| `stop_words` | `VK_STOP_WORDS` | `[]` | `18+,казино` | Стоп-слова inline (дополнительные к файлу, comma-separated) |
-| `stop_words_file` | `VK_STOP_WORDS_FILE` | `""` | `stop_words.txt` | Файл стоп-слов: одно слово на строку, `#` — комментарий |
-| `filter_mode` | `VK_FILTER_MODE` | `"stop_words"` | `llm` | Режим фильтрации: `"stop_words"` или `"llm"` |
+| `stop_words` | `VK_STOP_WORDS` | `[]` | `18+!,казино` | Стоп-слова inline (дополнительные к файлу, comma-separated; `!` — жёсткое) |
+| `stop_words_file` | `VK_STOP_WORDS_FILE` | `stop_words.txt` | `stop_words.txt` | Файл стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово |
+| `filter_mode` | `VK_FILTER_MODE` | `"stop_words"` | `review` | Режим фильтрации: `"stop_words"` / `"review"` / `"llm"` (review и llm требуют `llm_model` + `llm_api_key`) |
 
 ### Лимиты и задержки
 
@@ -214,18 +218,18 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `closed_wall_ttl_days` | `VK_CLOSED_WALL_TTL_DAYS` | `7` | Сколько дней не запрашивать закрытые/приватные стены |
 | `profile_max_size_mb` | `VK_PROFILE_MAX_SIZE_MB` | `500` | Лимит размера профиля Chrome (MB) — при превышении чистится кэш при старте и завершении |
 
-### LLM-фильтрация (опционально, `filter_mode: "llm"`)
+### LLM-фильтрация (опционально, `filter_mode: "review"` / `"llm"`)
 
 | Параметр | Env var | По умолч. | Пример в `.env` | Описание |
 |---|---|---|---|---|
 | `llm_model` | `VK_LLM_MODEL` | `""` | `openai/gpt-4o-mini` | Идентификатор модели (через litellm; префикс `openai/` обязателен — определяет протокол) |
 | `llm_api_base` | `VK_LLM_API_BASE` | `""` | `https://api.openai.com/v1` | Базовый URL API (пусто = default провайдера) |
 | `llm_api_key` | `VK_LLM_API_KEY` | `""` | `sk-...` | API-ключ провайдера (`SecretStr`, НЕ коммитить; для Ollama — любая непустая строка) |
-| `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт (переопределяет сборку из `llm_stop_topics`) |
-| `llm_stop_topics` | `VK_LLM_STOP_TOPICS` | (8 тем по умолчанию) | `политика,религия` | Стоп-темы для LLM (comma-separated; встроенный промпт, если `llm_system_prompt` пуст) |
+| `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт (полностью заменяет встроенный универсальный промпт) |
+| `llm_stop_topics` | `VK_LLM_STOP_TOPICS` | (8 тем по умолчанию) | `политика,религия` | Темы, которые LLM проверяет в режиме `llm` (comma-separated) |
 | `llm_timeout` | `VK_LLM_TIMEOUT` | `60` | `10` | Таймаут запроса к LLM (сек; reasoning-модели отвечают за 15–20 сек, запас 60 сек) |
 | `llm_max_tokens` | `VK_LLM_MAX_TOKENS` | `1000` | `5` | Лимит токенов в ответе LLM (reasoning-моделям нужен запас на размышление + ответ) |
-| `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `500` | `1000` | Обрезка текста поста перед отправкой в LLM |
+| `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `1000` | `1000` | Обрезка текста поста перед отправкой в LLM |
 | `llm_ssl_verify` | `VK_LLM_SSL_VERIFY` | `true` | `false` | Проверка SSL-сертификата LLM-endpoint (`false` — для корпоративных CA) |
 
 ### Примеры конфигурации LLM-провайдеров
@@ -288,14 +292,25 @@ VK_LLM_SSL_VERIFY=false
   Русские слова проходят
   лемматизацию через `pymorphy3`: стоп-слово «церковь» находит «церковью», «церкви»,
   «церковного». Нерусские слова и аббревиатуры — substring-поиск.
+  Слово с суффиксом `!` — **жёсткое**: пост отсекается в любом режиме. Слово без `!` —
+  **мягкое**: в режиме `stop_words` не отсекается, в режиме `review` помечает пост
+  на LLM-арбитраж (LLM решает по контексту: «карабин»-защёлка на поводке — OK,
+  оружие — SKIP). Смешанное совпадение (жёсткое + мягкое) считается жёстким.
 - **Свои посты:** посты, написанные вашим аккаунтом на чужих стенах, не лайкаются
 - **Дубликаты:** повторяющиеся посты (по паре автор + ID) пропускаются
 - **Уже лайкнутые:** проверка в браузере — если лайк уже стоит, пост пропускается
   (ловит посты, лайкнутые вручную вне инструмента)
-- **LLM-фильтрация (опционально):** при `filter_mode: "llm"` посты классифицируются через
-  `litellm.completion()` — LLM определяет тематику и отсеивает нежелательные темы (политика,
-  секс, религия, алкоголь, наркотики, азартные игры, оружие, экстремизм, крипта). Ошибка LLM →
-  пост пропускается дальше (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
+- **LLM-фильтрация (опционально):** включается `filter_mode` (`"review"` или `"llm"`,
+  оба режима требуют `VK_LLM_MODEL` + `VK_LLM_API_KEY`).
+  - **`review`** — LLM выступает арбитром: проверяет только посты, помеченные
+    стоп-словами (жёсткими и мягкими), и решает по контексту. Непомеченные посты
+    проходят без LLM-вызовов.
+  - **`llm`** — стоп-слова не участвуют, LLM проверяет **все** посты на темы
+    из `llm_stop_topics` (политика, секс, религия, алкоголь, наркотики, азартные
+    игры, оружие, экстремизм, крипта).
+  В обоих режимах: таймаут LLM → пост пропущен без пометки (проверится при следующей
+  выборке), другая ошибка LLM → пост идёт дальше (безопасный fallback). LLM-запросы
+  идут к провайдеру, не к VK — бан-риск нулевой.
 
 ## Антидетект
 

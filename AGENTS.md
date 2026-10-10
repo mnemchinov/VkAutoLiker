@@ -21,8 +21,8 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `CollectStage (structural: date + empty → is_processed → stop_words + ранний выход)` → 
-`DedupStage (дедупликация)` → `LLMFilterStage (опционально, filter_mode=="llm")` → 
+`VK API (сбор постов)` → `CollectStage (structural: date + empty → is_processed → стоп-слова: hard → FILTERED / в review → метка на LLM + ранний выход)` →
+`DedupStage (дедупликация)` → `LLMFilterStage (режимы review/llm: review — только помеченные, llm — все посты)` →
 `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
 ### Стек
@@ -46,26 +46,20 @@ pytest.ini             — регистрация маркеров browser / liv
 requirements.txt       — зависимости
 README.md              — документация проекта
 .gitignore             — исключения (chrome_profile, *.db, *.log, .venv и т.д.)
-src/                   — весь код, плоская структура БЕЗ __init__.py
+src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, vk_api/, repositories/, migrations/)
   main.py              — CLI-точка входа (login|run|test|status|reset)
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
-  post.py              — dataclass Post (owner_id, item_id, text, date, url)
-  vk_api/              — пакет клиента VK API: VKApiClient, VkApiSearchService, VKApiError, CaptchaError
-    vk_api_client.py     — HTTP-клиент VK API: rate-limit, ретраи, ошибки
-    vk_api_search_service.py — VkApiSearchService: newsfeed.search / wall.get / friends.get / groups.get
-  post_filter.py       — FilterChain: DateFilter + EmptyTextFilter + StopWordsFilter + LLMTopicFilter (декомпозиция PostFilter)
-  stage_llm_filter.py  — LLMFilterStage: pipeline-стадия для LLM-фильтрации (после DedupStage)
-  vk_browser.py        — VKBrowser: обёртка над Selenium + антидетект
-  browser_likes.py     — BrowserLikesService: клик по лайку + верификация
+  post.py              — dataclass Post (+ review/review_words), PostStatus, PostReview
   database.py          — Database: подключение SQLite
+  browser/             — VKBrowser (Selenium + антидетект), BrowserLikesService (клик + верификация)
+  post_filter/         — protocol, DateFilter, EmptyTextFilter, StopWordsFilter (matched/StopMatch), LLMTopicFilter, FilterChain
+  stages/              — Pipeline + PipelineContext; CollectStage (6 источников, ранний выход), DedupStage, LLMFilterStage (review/llm)
+  vk_api/              — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m003)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
-  pipeline.py          — Pipeline + PipelineContext + Stage Protocol
-  stage_collect.py     — CollectStage: 6 источников, ранний выход, фильтрация inline через FilterChain
-  stage_dedup.py       — DedupStage: дедупликация по (owner_id, item_id)
-stop_words.txt         — словарь стоп-слов (одна тема — одна строка, # — комментарий)
+stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (185 жёстких + 19 мягких)
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset)
@@ -73,10 +67,11 @@ chrome_profile/        — профиль Chrome (в .gitignore), хранит �
 ~/Library/LaunchAgents/ru.vkautoliker.plist — launchd-расписание (3 запуска/день)
 ```
 
-**Важно про импорты:** в `src/` нет `__init__.py`. Импорты плоские
-(`from settings import ...`, а не `from src.settings import ...`). Путь в `sys.path`
-добавляют вручную `src/main.py` и `tests/conftest.py`. Поэтому **все команды
-запускаются с корня проекта**, а модули импортируются по имени файла.
+**Важно про импорты:** импорты плоские по имени файла/пакета
+(`from settings import ...`, `from stages import CollectStage`, а не `from src.settings import ...`).
+Путь в `sys.path` добавляют вручную `src/main.py` и `tests/conftest.py`. Поэтому **все
+команды запускаются с корня проекта**. Внутренние импорты внутри пакетов — относительные
+(`from .module import ...`).
 
 ---
 
@@ -122,12 +117,12 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 ### Тесты
 
 ```bash
-pytest                                  # 117 passed, 2 skipped (live пропускаются)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон
+pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (185 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (81%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -137,7 +132,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (75%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — ~115 тестов, маркер не нужен.
+- Юнит-тесты на моках — 185 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -269,36 +264,50 @@ pytest -m "not browser and not live"    # базовая страховка по
     `subprocess` и передаёт `version_main` в `uc.Chrome()` — иначе UC скачает несовместимый ChromeDriver.
 18. **Config validation.** `@model_validator` в `Settings` проверяет `min <= max` для всех
     пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`,
-    `filter_mode` и `llm_model` при `filter_mode=="llm"`.
+    `filter_mode` (`"stop_words"`/`"review"`/`"llm"`) и `llm_model` + `llm_api_key`
+     при `review`/`llm` (оба или ни одного; в `stop_words` half-конфиг LLM не ошибка).
 21. **Секреты через env vars.** `service_token` и `llm_api_key` — `SecretStr`, загружаются
     из env vars `VK_SERVICE_TOKEN` и `VK_LLM_API_KEY`.
     `SecretStr` маскирует значение в `repr()` и логах; получить строку — `.get_secret_value()`.
     `.env` в `.gitignore`.
-19. **Декомпозиция PostFilter.** `post_filter.py` содержит `PostFilterProtocol` (Protocol),
+19. **Декомпозиция PostFilter.** Пакет `post_filter/` содержит `PostFilterProtocol` (Protocol),
     `DateFilter`, `EmptyTextFilter`, `StopWordsFilter`, `LLMTopicFilter` (один класс — одна проверка) и
     `FilterChain` (композит structural: `DateFilter` + `EmptyTextFilter`, без стоп-слов и LLM).
     `FilterChain.should_skip(post)` — per-post проверка structural-фильтров.
-    `StopWordsFilter` передаётся в `CollectStage` отдельно от `FilterChain` — отсеянные посты
-    маркируются `FILTERED`. `LLMTopicFilter` вызывается только через `LLMFilterStage`.
+    `StopWordsFilter` передаётся в `CollectStage` отдельно от `FilterChain`.
+    Роль слова задаётся суффиксом в самом словаре (файл `stop_words.txt` и inline `VK_STOP_WORDS`
+    — один парсер): `!` = жёсткое, без суффикса = мягкое; смешанное совпадение — жёсткое.
+    `matched(post) → StopMatch(words, hard)` — совпадение (words — леммы для LLM-промпта, hard — жёсткое);
+    `should_skip(post)` — обёртка: только hard.
     `CollectStage._accept()` перебирает посты построчно: structural → continue (без метки),
-    `is_processed` → continue, stop_words → `mark_processed(FILTERED)` + continue, свои посты → continue.
+    `is_processed` → continue, стоп-слова: в режиме `stop_words` — hard → `mark_processed(FILTERED)` + continue,
+    soft → проходит; в режиме `review` — пост помечается (`post.review` SOFT/HARD + `review_words`)
+    и остаётся в пуле; свои посты → continue.
     `is_processed` проверяется раньше стоп-слов: уже помеченный `FILTERED` пост не должен
     повторно доходить до `StopWordsFilter` и снова маркироваться при следующем сборе.
     **StopWordsFilter** использует `pymorphy3` для лемматизации русских слов: стоп-слово «церковь»
     находит «церковью», «церкви», «церковного». Три группы: `_stop_lemmas` (русские слова через
     лемматизацию), `_stop_substrings` (нерусские/аббревиатуры через substring), `_stop_phrases`
-    (многословные фразы через substring). `MorphAnalyzer` — class-level singleton (словарь ~5MB грузится один раз).
-    Каждый результат `should_skip()` логируется: совпадения — на INFO (с указанием слова/леммы),
+    (многословные фразы через substring) — каждая группа `dict[слово → hard]`.
+    `MorphAnalyzer` — class-level singleton (словарь ~5MB грузится один раз).
+    Каждый результат `matched()` логируется: совпадение — на INFO (с указанием слова/леммы и роли),
     OK — на DEBUG. В конце сбора `CollectStage` вызывает `FilterChain.log_summaries()` →
-    `StopWordsFilter.log_summary()` логирует сводку `Стоп-слова: проверено N, отсеяно M (X%)`.
-20. **LLM-фильтрация опциональна.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию)
-    или `"llm"`. При `"llm"` в конвейер добавляется `LLMFilterStage` (после `DedupStage`) —
-    каждый пост классифицируется через `litellm.completion()`. Ошибка LLM → пост не отсеивается
-    (безопасный fallback). **Таймаут LLM** (`litellm.Timeout`) → `LLMTimeoutError` → пост
-    пропускается без маркировки (не LIKED, не FILTERED) → попадёт в следующую выборку.
-    LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
-    Отсеянные посты (стоп-слова в `CollectStage._accept()`, LLM в `LLMFilterStage`) маркируются
-    `mark_processed(..., PostStatus.FILTERED)` — не повторяются в следующих сессиях.
+    `StopWordsFilter.log_summary()`: в stop_words-режиме — `Стоп-слова: проверено N, отсеяно M (X%)`,
+    в review-режиме — `Стоп-слова: проверено N, помечено M для LLM`.
+20. **Три режима filter_mode.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию), `"review"`,
+    `"llm"`. `"review"`/`"llm"` требуют и `VK_LLM_MODEL`, и `VK_LLM_API_KEY` (both-or-neither),
+    иначе ошибка валидации при старте; в режиме `"stop_words"` half-конфигурация LLM не ошибка.
+    **`stop_words`**: жёсткие слова отсекают посты при сборе, мягкие проходят — LLM не участвует.
+    **`review`**: стоп-слова только помечают посты (`Post.review` SOFT/HARD + `review_words`);
+    `LLMFilterStage` добавляется в конвейер после `DedupStage` и арбитражает **только помеченные**
+    (жёсткие и мягкие — единый путь); непомеченные проходят без LLM-вызовов.
+    **`llm`**: стоп-слова не участвуют (словарь не загружается), `LLMFilterStage` проверяет
+    **все** посты по темам `llm_stop_topics`.
+    Арбитраж LLM: SKIP → `mark_processed(FILTERED)`; OK → пост идёт на лайк.
+    **Таймаут LLM** (`litellm.Timeout`) → `LLMTimeoutError` → пост
+    пропускается без маркировки (не LIKED, не FILTERED) → попадёт в следующую выборку;
+    сводка различает «отсеяно» и «пропущено: таймаут». Остальные ошибки LLM → пост
+    не отсеивается (безопасный fallback). LLM-запросы идут к провайдеру, не к VK — бан-риск нулевой.
     `LLMFilterStage` принимает `PostsRepository` в конструктор для маркировки.
     `llm_timeout=60` (env `VK_LLM_TIMEOUT`) — таймаут LLM-запроса; reasoning-модели отвечают
     за 15–20 сек, 60 сек — запас. `max_retries=0` передаётся в litellm — отключает ретраи
@@ -307,10 +316,15 @@ pytest -m "not browser and not live"    # базовая страховка по
     недостаточно для токенизации «SKIP», `5` недостаточно для reasoning-моделей (токены
     уходят на `reasoning_content`, `content` остаётся пустым). `1000` — запас на reasoning + ответ.
     Каждый ответ логируется на INFO.
-    Системный промпт: «не углубляйся в рассуждения, не переходи по ссылкам, определяй тему
-    только по тексту поста» — сокращает reasoning MagnitCopilot. Собирается из `llm_stop_topics`
-    (список стоп-тем в `Settings`, переопределяется через `VK_LLM_STOP_TOPICS`);
-    `llm_system_prompt` полностью заменяет сборку, если задан.
+    Системный промпт — универсальная константа `SYSTEM_PROMPT` в `LLMTopicFilter` (роль фильтра
+    контента, правила SKIP/OK с категориями ложных срабатываний: другое значение слова,
+    глагол/устойчивое выражение, игра/метафора/бренд/название, вскользь) — не зависит от словаря
+    и режима. Динамическая часть — в user-сообщении: review — `Слова, найденные в посте: X, Y`
+    (`post.review_words`), llm — темы `llm_stop_topics` (`VK_LLM_STOP_TOPICS`); `llm_system_prompt`
+    заменяет системный промпт, если задан.
+    `llm_max_text_length=1000` (env `VK_LLM_MAX_TEXT_LENGTH`) — текст поста обрезается
+    перед отправкой; в review-режиме триггерное слово может оказаться за обрезом — допустимо:
+    мягкое слово не наказуемо, а посты на стенах друзей короче.
     `llm_ssl_verify=False` (env `VK_LLM_SSL_VERIFY=false`) отключает
     проверку SSL через `litellm.client_session = httpx.Client(verify=False)` — для
     корпоративных endpoint'ов с CA, отсутствующим в `certifi`.
