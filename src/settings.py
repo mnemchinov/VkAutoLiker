@@ -99,8 +99,8 @@ class Settings(BaseSettings):
     llm_ssl_verify: bool = True
 
     # Лимиты и задержки (все рандомизируются через random.uniform)
-    likes_per_session_min: int = 20
-    likes_per_session_max: int = 30
+    likes_per_session_min: int = 40
+    likes_per_session_max: int = 50
     sessions_per_day: int = 3
     min_delay_sec: int = 15
     max_delay_sec: int = 60

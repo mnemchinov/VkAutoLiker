@@ -31,8 +31,8 @@ class TestSettings:
 
         assert s.service_token.get_secret_value() == ""
         assert s.api_version == "5.131"
-        assert s.likes_per_session_min == 20
-        assert s.likes_per_session_max == 30
+        assert s.likes_per_session_min == 40
+        assert s.likes_per_session_max == 50
         assert s.days_back == 30
         assert s.filter_mode == "stop_words"
         assert s.queries == []
