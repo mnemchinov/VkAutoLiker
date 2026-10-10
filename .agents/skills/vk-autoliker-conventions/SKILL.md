@@ -105,10 +105,12 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 ### 12. Stale Chrome cleanup перед стартом
 
 `VKBrowser.start()` завершает процессы Chrome, использующие `chrome_profile/`
-(через `pgrep` + `SIGTERM`), удаляет lock-файлы (`Singleton*`) и при
-превышении `profile_max_size_mb` чистит кэш-подкаталоги `Default/Cache`,
-`Default/Code Cache`, `Default/GPUCache`, иначе `SessionNotCreatedException`.
-`VKBrowser.close()` делает ту же очистку после `quit()`.
+(на POSIX — `pgrep` + `SIGTERM`, на Windows — PowerShell CIM + `SIGTERM`),
+удаляет lock-файлы (`Singleton*`) и при превышении `profile_max_size_mb`
+чистит кэш-подкаталоги `Default/Cache`, `Default/Code Cache`, `Default/GPUCache`,
+иначе `SessionNotCreatedException`. Размер считается рекурсивным обходом (`rglob`) —
+утилиты `du` на Windows нет. `VKBrowser.close()` делает ту же очистку после `quit()`;
+`AutoLiker.close()` вызывает его, чтобы Chrome не висел и не держал профиль.
 
 ### 13. Конвейер фильтрации (`filter_mode`)
 
@@ -147,10 +149,11 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 ## Сеть и ретраи
 
-### Двойной запуск (fcntl.flock)
+### Двойной запуск (FileLock: fcntl / msvcrt)
 
-`main.py` использует `fcntl.flock` exclusive file lock при старте. Второй процесс
-(launchd двойной запуск) находит lock занятым и немедленно завершается.
+`main.py` через `FileLock` (`src/file_lock.py`) берёт эксклюзивную файловую
+блокировку при старте: `fcntl.flock` на POSIX, `msvcrt.locking` на Windows.
+Второй процесс (launchd двойной запуск) находит lock занятым и немедленно завершается.
 
 ### finally в main()
 

@@ -14,7 +14,6 @@ class TestMain:
         mock_liker = MagicMock()
         with (
             patch("main._acquire_lock"),
-            patch("main.fcntl.flock"),
             patch("main.get_settings"),
             patch("main.AppLogger"),
             patch("main.AutoLiker", return_value=mock_liker),
@@ -30,7 +29,6 @@ class TestMain:
         mock_liker.run.side_effect = KeyboardInterrupt
         with (
             patch("main._acquire_lock"),
-            patch("main.fcntl.flock"),
             patch("main.get_settings"),
             patch("main.AppLogger"),
             patch("main.AutoLiker", return_value=mock_liker),

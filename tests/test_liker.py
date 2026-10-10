@@ -526,3 +526,14 @@ class TestPipelineComposition:
         stages = self._stages(mock_config_data, monkeypatch, filter_mode="llm")
 
         assert stages == [CollectStage, DedupStage, LLMFilterStage]
+
+
+class TestClose:
+    """Тесты close: браузер закрывается до БД, Chrome не остаётся висеть."""
+
+    def test_close_closes_browser_and_db(self, liker):
+        """close() закрывает и браузер, и БД."""
+        liker.close()
+
+        liker._browser.close.assert_called_once()
+        liker._db.close.assert_called_once()

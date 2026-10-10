@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-189%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-81%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-201%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-83%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -323,7 +323,7 @@ VK_LLM_SSL_VERIFY=false
 - Человеческое поведение: скролл, движение мыши, паузы «чтения»
 - Друзья/группы — случайная выборка каждую сессию
 - Рандомизация лайков за сессию: `random.randint(min, max)`
-- Защита от двойного запуска (на macOS/Linux)
+- Защита от двойного запуска — файловая блокировка (`fcntl` на macOS/Linux, `msvcrt` на Windows)
 - Retry при сбоях сети в проверке авторизации и API-вызовах
 
 ## Автоматизация
@@ -384,6 +384,6 @@ schtasks /query /tn "VkAutoLiker_*"       # статус
 schtasks /delete /tn "VkAutoLiker_10" /f  # удалить задачу
 ```
 
-**Примечание:** на Windows защита от двойного запуска недоступна — она работает
-только на macOS/Linux. Task Scheduler не запускает процесс дважды, поэтому
-это не критично.
+**Примечание:** защита от двойного запуска работает и на Windows — через
+`msvcrt.locking`. Task Scheduler не запускает процесс дважды, но блокировка
+страхует от ручного параллельного запуска.
