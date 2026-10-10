@@ -81,6 +81,26 @@ class TestStopWordsFilter:
         assert f.should_skip(make_post(2, 2, "заходи в казино")) is True
         assert f.should_skip(make_post(3, 3, "обычный пост")) is False
 
+    def test_military_recruitment_post_marked_hard(self, mock_config, mock_logger, tmp_path):
+        """Рекрутинговое объявление с игрой слов «СВОим» помечается жёстко."""
+        sw_file = tmp_path / "stop.txt"
+        sw_file.write_text("вооруженных сил!\nв ряды\n", encoding="utf-8")
+
+        mock_config.stop_words = []
+        mock_config.stop_words_file = str(sw_file)
+        f = StopWordsFilter(mock_config, mock_logger)
+
+        post = make_post(
+            1,
+            1,
+            "⚡Присоединяйтесь к СВОим: вступайте в ряды Вооруженных сил России\n"
+            "Авиатехникум: каб А304",
+        )
+        m = f.matched(post)
+        assert m is not None
+        assert m.hard is True
+        assert "вооруженных сил" in m.words
+
     def test_stop_words_file_not_found(self, mock_config, mock_logger):
         """Отсутствующий файл стоп-слов — warning, работа продолжается."""
         mock_config.stop_words = ["спам!"]
