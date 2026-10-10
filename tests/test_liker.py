@@ -4,6 +4,7 @@
 не задействуются. Pipeline мокается как pass-through.
 """
 
+import logging
 import time
 from unittest.mock import MagicMock, patch
 
@@ -380,6 +381,109 @@ class TestRun:
         # Проверяем, что хотя бы один sleep был >= 60 сек (burst pause)
         long_pauses = [call for call in mock_sleep.call_args_list if call.args[0] >= 60]
         assert len(long_pauses) > 0
+
+    def test_pool_smaller_than_target_counts_by_pool(self, liker, mock_config, caplog):
+        """Пул 3 < target 10 — счётчик по пулу, паузы нет после последнего поста."""
+        mock_config.likes_per_session_min = 10
+        mock_config.likes_per_session_max = 10
+        posts = [_make_post(1, i) for i in range(3)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
+        liker._posts_repo.mark_processed = MagicMock()
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+        mock_config.min_delay_sec = 15
+        mock_config.max_delay_sec = 60
+
+        uniform_calls: list = []
+
+        def track_uniform(a, b):
+            uniform_calls.append((a, b))
+            return 0
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", side_effect=track_uniform),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+            caplog.at_level(logging.INFO),
+        ):
+            liker.run(no_limit=True)
+
+        assert liker._likes_service.like.call_count == 3
+        assert "Лайкнут (3/3)" in caplog.text
+        assert "Пул постов (3) меньше цели (10)" in caplog.text
+        normal = [c for c in uniform_calls if c == (15, 60)]
+        assert len(normal) == 2  # после 3-го (последнего) поста паузы нет
+
+    def test_no_pause_after_limit_reached(self, liker, mock_config, caplog):
+        """Пул 5 > target 2 — после 2-го лайка лимит достигнут, паузы нет."""
+        mock_config.likes_per_session_min = 2
+        mock_config.likes_per_session_max = 2
+        posts = [_make_post(1, i) for i in range(5)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
+        liker._posts_repo.mark_processed = MagicMock()
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+        mock_config.min_delay_sec = 15
+        mock_config.max_delay_sec = 60
+
+        uniform_calls: list = []
+
+        def track_uniform(a, b):
+            uniform_calls.append((a, b))
+            return 0
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", side_effect=track_uniform),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+            caplog.at_level(logging.INFO),
+        ):
+            liker.run(no_limit=True)
+
+        assert liker._likes_service.like.call_count == 2
+        normal = [c for c in uniform_calls if c == (15, 60)]
+        assert len(normal) == 1
+        assert "Лимит лайков за сессию достигнут (2/2)" in caplog.text
+
+    def test_early_finish_logged_when_post_fails(self, liker, mock_config, caplog):
+        """1 лайк + 1 FAILED — в логе строка «Досрочное завершение: 1/2»."""
+        mock_config.likes_per_session_min = 2
+        mock_config.likes_per_session_max = 2
+        posts = [_make_post(1, i) for i in range(2)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(side_effect=[LikeResult.LIKED, LikeResult.FAILED])
+        liker._posts_repo.mark_processed = MagicMock()
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+        mock_config.min_delay_sec = 15
+        mock_config.max_delay_sec = 60
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", return_value=0),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+            caplog.at_level(logging.INFO),
+        ):
+            liker.run(no_limit=True)
+
+        assert "Досрочное завершение: лайков 1/2" in caplog.text
 
 
 class TestPipelineComposition:
