@@ -123,7 +123,7 @@ pytest -m "not browser and not live"    # только юнит-тесты, бы
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (81%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (83%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
