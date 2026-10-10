@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -5,6 +6,19 @@ from unittest.mock import MagicMock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+
+@pytest.fixture(autouse=True)
+def _clean_vk_env(monkeypatch):
+    """Удаляет VK_* из os.environ перед каждым тестом.
+
+    litellm при импорте выполняет load_dotenv() и грузит .env проекта
+    в окружение процесса — содержимое .env (режим, LLM-ключи) начинает
+    влиять на Settings(_env_file=None) во всех последующих тестах.
+    """
+    for key in list(os.environ):
+        if key.startswith("VK_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture
