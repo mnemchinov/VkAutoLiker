@@ -166,11 +166,6 @@ class Settings(BaseSettings):
             )
         return self
 
-    @property
-    def llm_connected(self) -> bool:
-        """LLM настраивается: заданы и llm_model, и llm_api_key."""
-        return bool(self.llm_model and self.llm_api_key.get_secret_value())
-
 
 def get_settings() -> Settings:
     """Создаёт Settings() с обработкой ошибок валидации.
