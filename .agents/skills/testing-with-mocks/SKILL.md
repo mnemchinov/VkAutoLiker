@@ -101,6 +101,7 @@ pytest -m "not browser and not live"
 def test_something(tmp_db_path):
     from database import Database
     from settings import Settings
+
     config = Settings(db_path=tmp_db_path, service_token="test_token")
     db = Database(config)
 ```

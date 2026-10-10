@@ -111,7 +111,7 @@ class TestCollectStage:
         collect_stage._search.search = MagicMock(return_value=posts)
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
         collect_stage._posts_repo.is_processed = MagicMock(
-            side_effect=lambda owner_id, item_id: (owner_id == 1 and item_id == 2)
+            side_effect=lambda owner_id, item_id: owner_id == 1 and item_id == 2
         )
 
         ctx = PipelineContext(config=mock_config, target_likes=5)
@@ -130,9 +130,9 @@ class TestCollectStage:
         collect_stage._search.search = MagicMock(return_value=[good_post, bad_post])
         collect_stage._search.search_hashtag = MagicMock(return_value=[])
         collect_stage._stop_words.matched = MagicMock(
-            side_effect=lambda p: StopMatch(words=["политика"], hard=True)
-            if "политика" in p.text
-            else None
+            side_effect=lambda p: (
+                StopMatch(words=["политика"], hard=True) if "политика" in p.text else None
+            )
         )
 
         ctx = PipelineContext(config=mock_config, target_likes=5)
