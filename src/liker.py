@@ -1,8 +1,11 @@
 """Оркестратор: сбор постов через Pipeline → лайки через браузер.
 
 Конвейер (Pipeline) обрабатывает посты через стадии:
-CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп).
-При filter_mode=="llm" добавляется LLMFilterStage (после дедупликации).
+CollectStage (6 источников, фильтрация, ранний выход) → DedupStage (дедуп)
+→ LLMFilterStage (только в режимах review/llm, после дедупликации).
+StopWordsFilter подключается в режимах stop_words/review: жёсткое слово ('!')
+отсекает пост в stop_words, в review любое совпадение помечает пост для
+LLM-арбитража.
 AutoLiker создаёт Pipeline в конструкторе и вызывает его в run().
 """
 
@@ -45,7 +48,9 @@ class AutoLiker:
         self._sessions_repo = SessionsRepository(self._db)
         self._walls_repo = ClosedWallsRepository(self._db, config)
         structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
-        stop_words = StopWordsFilter(config, logger) if config.filter_mode == "stop_words" else None
+        stop_words = None
+        if config.filter_mode in ("stop_words", "review"):
+            stop_words = StopWordsFilter(config, logger)
         stages: list = [
             CollectStage(
                 self._search_service,
@@ -58,7 +63,7 @@ class AutoLiker:
             ),
             DedupStage(),
         ]
-        if config.filter_mode == "llm":
+        if config.filter_mode in ("review", "llm"):
             stages.append(LLMFilterStage(config, logger, self._posts_repo))
         self._pipeline = Pipeline(stages)
 
@@ -161,11 +166,19 @@ class AutoLiker:
                 self._logger.info("Нет постов после фильтрации")
                 return
 
+            # Эффективный лимит: пул может быть меньше target (на стенах нет
+            # свежих постов) — считаем по пулу, чтобы сессия не выглядела провальной
+            limit = min(target, len(all_posts))
+            if limit < target:
+                self._logger.info(
+                    f"Пул постов ({len(all_posts)}) меньше цели ({target}) — работаю с полным пулом"
+                )
+
             self._logger.info(f"Обработка {len(all_posts)} постов")
 
-            for post in all_posts:
-                if likes_count >= target:
-                    self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{target})")
+            for index, post in enumerate(all_posts):
+                if likes_count >= limit:
+                    self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{limit})")
                     break
 
                 # Стоп-условие: серия капч — VK заподозрил автоматизацию
@@ -190,7 +203,7 @@ class AutoLiker:
                         self._posts_repo.mark_processed(
                             post.owner_id, post.item_id, PostStatus.LIKED
                         )
-                        self._logger.info(f"Лайкнут ({likes_count}/{target})")
+                        self._logger.info(f"Лайкнут ({likes_count}/{limit})")
                     elif result == LikeResult.ALREADY_LIKED:
                         already_liked_count += 1
                         captcha_streak = 0
@@ -215,6 +228,15 @@ class AutoLiker:
                     self._logger.error(f"Ошибка обработки {post.owner_id}_{post.item_id}: {e}")
                     continue
 
+                # Не засыпаем, если цикл не продолжится: последний пост пула,
+                # лимит достигнут или сработал капча-стоп
+                if (
+                    index == len(all_posts) - 1
+                    or likes_count >= limit
+                    or captcha_streak >= self._config.max_captcha_streak
+                ):
+                    continue
+
                 # Burst-смягчение: каждые 5-10 лайков — длинная пауза «отвлечения»
                 if likes_since_break >= next_break_at:
                     long_pause = random.uniform(60, 180)
@@ -228,6 +250,11 @@ class AutoLiker:
                     delay = random.uniform(self._config.min_delay_sec, self._config.max_delay_sec)
                     self._logger.info(f"Пауза {delay:.1f} сек перед следующим постом...")
                     time.sleep(delay)
+
+            # Посты закончились или цикл прерван, а лимит не достигнут —
+            # причина досрочного конца всегда видна в логе
+            if likes_count < limit:
+                self._logger.info(f"Досрочное завершение: лайков {likes_count}/{limit}")
 
         except CaptchaError as e:
             self._logger.warning(f"Капча от VK API при сборе постов: {e}")

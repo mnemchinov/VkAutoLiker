@@ -307,6 +307,9 @@ class VKBrowser:
         if self._driver is None:
             return False
 
+        # Навигация на vk.ru может идти долго (корпоративная сеть) —
+        # стартовая строка отличает медленную проверку от зависания
+        self._logger.info("Проверка авторизации...")
         max_retries = 3
         for attempt in range(max_retries):
             try:

@@ -9,7 +9,8 @@ env_prefix="VK_" → VK_SERVICE_TOKEN, VK_LLM_API_KEY, VK_QUERIES и т.д.
 comma-separated строк в env vars: VK_QUERIES='vk новости,россия,python'.
 
 Валидация (min<=max, days_back>0, user_id>0 при auto_friends/auto_groups,
-filter_mode и llm_model) — через @model_validator после создания.
+filter_mode 'stop_words'/'review'/'llm', llm_model+llm_api_key при review/llm) —
+через @model_validator после создания.
 ValidationError обёртывается в ValueError в get_settings() — main.py
 ловит ValueError и выводит в stderr.
 """
@@ -77,7 +78,7 @@ class Settings(BaseSettings):
     stop_words_file: str = "stop_words.txt"
     filter_mode: str = "stop_words"
 
-    # LLM-фильтр (litellm, работает только при filter_mode=="llm")
+    # LLM (litellm, используется при filter_mode 'review'/'llm')
     llm_model: str = ""
     llm_api_base: str = ""
     llm_api_key: SecretStr = SecretStr("")
@@ -94,12 +95,12 @@ class Settings(BaseSettings):
     ]
     llm_timeout: int = 60
     llm_max_tokens: int = 1000
-    llm_max_text_length: int = 500
+    llm_max_text_length: int = 1000
     llm_ssl_verify: bool = True
 
     # Лимиты и задержки (все рандомизируются через random.uniform)
-    likes_per_session_min: int = 20
-    likes_per_session_max: int = 30
+    likes_per_session_min: int = 40
+    likes_per_session_max: int = 50
     sessions_per_day: int = 3
     min_delay_sec: int = 15
     max_delay_sec: int = 60
@@ -131,9 +132,9 @@ class Settings(BaseSettings):
     @field_validator("filter_mode")
     @classmethod
     def _validate_filter_mode(cls, v: str) -> str:
-        """Проверяет, что filter_mode — stop_words или llm."""
-        if v not in ("stop_words", "llm"):
-            raise ValueError("filter_mode должен быть 'stop_words' или 'llm'")
+        """Проверяет, что filter_mode — stop_words, review или llm."""
+        if v not in ("stop_words", "review", "llm"):
+            raise ValueError("filter_mode должен быть 'stop_words', 'review' или 'llm'")
         return v
 
     @model_validator(mode="after")
@@ -142,7 +143,7 @@ class Settings(BaseSettings):
 
         min<=max для всех пар задержек/лимитов, days_back>0,
         user_id>0 при auto_friends/auto_groups,
-        llm_model при filter_mode=="llm".
+        llm_model + llm_api_key при filter_mode 'review'/'llm' (оба или ни одного).
         """
         if self.likes_per_session_min > self.likes_per_session_max:
             raise ValueError("likes_per_session_min > likes_per_session_max")
@@ -156,8 +157,13 @@ class Settings(BaseSettings):
             raise ValueError("user_id должен быть > 0 при auto_friends=True")
         if self.auto_groups and self.user_id <= 0:
             raise ValueError("user_id должен быть > 0 при auto_groups=True")
-        if self.filter_mode == "llm" and not self.llm_model:
-            raise ValueError("llm_model должен быть задан при filter_mode='llm'")
+        if self.filter_mode in ("review", "llm") and (
+            not self.llm_model or not self.llm_api_key.get_secret_value()
+        ):
+            raise ValueError(
+                f"filter_mode='{self.filter_mode}' требует llm_model и llm_api_key "
+                "(оба или ни одного)"
+            )
         return self
 
 
