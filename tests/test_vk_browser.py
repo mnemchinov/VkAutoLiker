@@ -66,6 +66,45 @@ class TestVKBrowserIsLoggedIn:
         with patch("browser.vk_browser.time.sleep"):
             assert browser.is_logged_in() is False
 
+    def test_logged_in_logs_check_start(self, mock_config, mock_logger, caplog):
+        """Старт проверки логируется: навигация на vk.ru может идти долго."""
+        import logging
+
+        browser = VKBrowser(mock_config, mock_logger)
+        browser._driver = MagicMock()
+        browser._driver.get_cookies.return_value = []
+        with (
+            patch("browser.vk_browser.time.sleep"),
+            caplog.at_level(logging.INFO, logger="vk_autoliker"),
+        ):
+            assert browser.is_logged_in() is False
+        assert "Проверка авторизации..." in caplog.text
+
+
+class TestVKBrowserClose:
+    def test_close_quits_driver_and_cleans_cache(self, mock_config, mock_logger):
+        """close() завершает драйвер и чистит кэш профиля — как при старте."""
+        browser = VKBrowser(mock_config, mock_logger)
+        driver = MagicMock()
+        browser._driver = driver
+
+        with patch.object(browser, "_cleanup_profile_cache") as cleanup:
+            browser.close()
+
+        driver.quit.assert_called_once()
+        cleanup.assert_called_once()
+        assert browser._driver is None
+
+    def test_close_without_driver_skips_cache_cleanup(self, mock_config, mock_logger):
+        """close() без активного драйвера не чистит кэш и не падает."""
+        browser = VKBrowser(mock_config, mock_logger)
+        browser._driver = None
+
+        with patch.object(browser, "_cleanup_profile_cache") as cleanup:
+            browser.close()
+
+        cleanup.assert_not_called()
+
 
 class TestVKBrowserCleanup:
     """Windows-совместимость: размер профиля без du, stale Chrome без pgrep."""

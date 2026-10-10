@@ -1,6 +1,6 @@
 """Unit-тесты подключения Database.
 
-Database — тонкая обёртка над sqlite3.Connection с контекстным менеджером.
+Database — тонкая обёртка над sqlite3.Connection.
 Миграции тестируются отдельно в test_migrations.py.
 """
 
@@ -24,36 +24,6 @@ class TestDatabase:
         db.close()
         # Повторный close не падает
         db.close()
-
-    def test_context_manager_commits_on_success(self, mock_config, tmp_path):
-        """with db — commit при выходе без ошибки."""
-        mock_config.db_path = str(tmp_path / "test.db")
-        db = Database(mock_config)
-        db.conn.execute("CREATE TABLE t (x INTEGER)")
-        with db:
-            db.conn.execute("INSERT INTO t (x) VALUES (1)")
-        row = db.conn.execute("SELECT x FROM t").fetchone()
-        db.close()
-        assert row is not None
-        assert row[0] == 1
-
-    def test_context_manager_rollback_on_error(self, mock_config, tmp_path):
-        """with db — rollback при исключении внутри блока."""
-        mock_config.db_path = str(tmp_path / "test.db")
-        db = Database(mock_config)
-        db.conn.execute("CREATE TABLE t (x INTEGER)")
-        try:
-            with db:
-                db.conn.execute("INSERT INTO t (x) VALUES (1)")
-                raise RuntimeError("test error")
-        except RuntimeError:
-            pass
-        # При исключении __exit__ вызывает rollback — insert отменён
-        db.conn.execute("INSERT INTO t (x) VALUES (2)")
-        db.commit()
-        row = db.conn.execute("SELECT COUNT(*) FROM t").fetchone()
-        db.close()
-        assert row[0] == 1
 
     def test_commit_persists_changes(self, mock_config, tmp_path):
         """commit фиксирует изменения в БД."""

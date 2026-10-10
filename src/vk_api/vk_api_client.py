@@ -51,7 +51,7 @@ class VKApiClient:
     def call(self, method: str, params: dict | None = None) -> dict:
         """Вызывает VK API метод и возвращает поле 'response' из ответа.
 
-        При error 6 — ретрай в цикле (не рекурсия), max 3 попытки.
+        При error 6 — ретрай в цикле, max 3 попытки.
         При сетевой ошибке — ретрай max 3 с задержкой 5с.
         """
         if params is None:

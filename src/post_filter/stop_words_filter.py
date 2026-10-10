@@ -1,11 +1,18 @@
-"""Фильтр стоп-слов: отсеивает посты по словарю через лемматизацию pymorphy3.
+"""Стоп-слова: словарь с маркером жёсткости, лемматизация pymorphy3.
+
+Роль слова задаётся суффиксом '!' в самом словаре (файл и inline-список):
+  'наркотики!' — жёсткое: в режиме stop_words пост отсекается;
+  'карабин'    — мягкое: не отсекается, в режиме review пост помечается
+                 на LLM-арбитраж (matched() → StopMatch).
+Смешанное совпадение (жёсткое + мягкое) — hard.
 
 Стоп-слова загружаются из двух источников:
   1. stop_words_file — внешний текстовый файл (одно слово на строку, '#' — комментарий)
   2. stop_words — inline-список из Settings
-Списки объединяются. Если файл не найден — предупреждение в лог, используется только inline.
+Списки объединяются, '!' из любого источника превалирует. Если файл не найден —
+предупреждение в лог, используется только inline.
 
-Разделяются на три группы:
+Группы:
   1. _stop_lemmas — леммы русских слов (pymorphy3: «церковью» → «церковь»).
   2. _stop_substrings — нерусские слова и аббревиатуры (18+, xxx, СВО, mlm) — substring.
   3. _stop_phrases — многословные фразы («игровые автоматы») — substring.
@@ -14,6 +21,7 @@ MorphAnalyzer — class-level singleton: словарь (~5MB) грузится 
 """
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from pymorphy3 import MorphAnalyzer
@@ -25,8 +33,20 @@ from settings import Settings
 from .protocol import PostFilterProtocol
 
 
+@dataclass
+class StopMatch:
+    """Совпадение стоп-слов в тексте поста.
+
+    words — леммы/слова-триггеры (передаются в LLM-промпт арбитража).
+    hard — True, если сработало хотя бы одно жёсткое слово (с '!').
+    """
+
+    words: list[str]
+    hard: bool
+
+
 class StopWordsFilter(PostFilterProtocol):
-    """Отсеивает посты, содержащие стоп-слова (регистронезависимо)."""
+    """Стоп-слова в тексте поста: matched() — совпадение (слова + жёсткость), should_skip() — только hard."""
 
     _morph: MorphAnalyzer | None = None
 
@@ -40,29 +60,45 @@ class StopWordsFilter(PostFilterProtocol):
     def __init__(self, config: Settings, logger: AppLogger):
         """Инициализирует фильтр стоп-слов из файла и inline-списка Settings."""
         self._logger = logger
+        self._config = config
         self._checked: int = 0
+        self._matched: int = 0
         self._skipped: int = 0
 
         file_words = self._load_stop_words_file(config.stop_words_file)
-        inline_words = [w.lower() for w in config.stop_words]
-        all_words = set(file_words + inline_words)
+        all_raw = file_words + list(config.stop_words)
 
-        self._stop_lemmas: set[str] = set()
-        self._stop_substrings: set[str] = set()
-        self._stop_phrases: set[str] = set()
+        # Слово → жёсткость: '!' из любого источника превалирует
+        entries: dict[str, bool] = {}
+        for raw in all_raw:
+            word, hard = self._parse_word(raw)
+            if word:
+                entries[word] = entries.get(word, False) or hard
+
+        self._stop_lemmas: dict[str, bool] = {}
+        self._stop_substrings: dict[str, bool] = {}
+        self._stop_phrases: dict[str, bool] = {}
 
         morph = self._get_morph()
-        for word in all_words:
+        for word, hard in entries.items():
             if " " in word:
-                self._stop_phrases.add(word)
+                self._stop_phrases[word] = hard
             elif re.fullmatch(r"[а-яё]+", word):
-                parse = morph.parse(word)[0]
-                self._stop_lemmas.add(parse.normal_form)
+                lemma = morph.parse(word)[0].normal_form
+                self._stop_lemmas[lemma] = self._stop_lemmas.get(lemma, False) or hard
             else:
-                self._stop_substrings.add(word)
+                self._stop_substrings[word] = self._stop_substrings.get(word, False) or hard
+
+    @staticmethod
+    def _parse_word(raw: str) -> tuple[str, bool]:
+        """Разбирает слово с маркером жёсткости: 'слово!' → ('слово', True), 'слово' → ('слово', False)."""
+        w = raw.strip().lower()
+        if w.endswith("!"):
+            return w[:-1].strip(), True
+        return w, False
 
     def _load_stop_words_file(self, path: str) -> list[str]:
-        """Загружает стоп-слова из текстового файла.
+        """Загружает стоп-слова из текстового файла (маркер '!' сохраняется в строке).
 
         Формат: одно слово на строку, строки с '#' и пустые — пропускаются.
         Возвращает пустой список, если путь пуст или файл не найден.
@@ -80,57 +116,71 @@ class StopWordsFilter(PostFilterProtocol):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            words.append(stripped.lower())
+            words.append(stripped)
 
         self._logger.info(f"Загружено {len(words)} стоп-слов из {path}")
         return words
 
-    def should_skip(self, post: Post) -> bool:
-        """True, если текст поста содержит любое стоп-слово.
+    def matched(self, post: Post) -> StopMatch | None:
+        """Находит стоп-слова в тексте поста, возвращает StopMatch или None.
 
-        Сначала проверяются substring-группы (быстро), затем лемматизация.
-        Совпадения логируются на INFO, OK — на DEBUG.
+        words — все сработавшие слова/леммы (для LLM-промпта), hard — если
+        сработало хотя бы одно жёсткое слово. Совпадения логируются на INFO,
+        OK — на DEBUG.
         """
         self._checked += 1
         post_id = f"{post.owner_id}_{post.item_id}"
 
         if not self._stop_lemmas and not self._stop_substrings and not self._stop_phrases:
             self._logger.debug(f"Стоп-слова: пост {post_id} → OK (словарь пуст)")
-            return False
+            return None
 
         text_lower = post.text.lower()
+        words: list[str] = []
+        hard = False
 
-        for s in self._stop_substrings:
+        for s, h in self._stop_substrings.items():
             if s in text_lower:
-                self._skipped += 1
-                self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{s}' (substring)")
-                return True
-        for p in self._stop_phrases:
+                words.append(s)
+                hard = hard or h
+        for p, h in self._stop_phrases.items():
             if p in text_lower:
-                self._skipped += 1
-                self._logger.info(f"Стоп-слова: пост {post_id} → совпадение '{p}' (фраза)")
-                return True
+                words.append(p)
+                hard = hard or h
 
-        if not self._stop_lemmas:
+        if self._stop_lemmas:
+            morph = self._get_morph()
+            for token in re.findall(r"[а-яё]{3,}", text_lower):
+                lemma = morph.parse(token)[0].normal_form
+                if lemma in self._stop_lemmas:
+                    if lemma not in words:
+                        words.append(lemma)
+                    hard = hard or self._stop_lemmas[lemma]
+
+        if not words:
             self._logger.debug(f"Стоп-слова: пост {post_id} → OK")
-            return False
+            return None
 
-        morph = self._get_morph()
-        for token in re.findall(r"[а-яё]{3,}", text_lower):
-            lemma = morph.parse(token)[0].normal_form
-            if lemma in self._stop_lemmas:
-                self._skipped += 1
-                self._logger.info(
-                    f"Стоп-слова: пост {post_id} → совпадение '{token}' → лемма '{lemma}'"
-                )
-                return True
+        self._matched += 1
+        if hard:
+            self._skipped += 1
+        role = "hard" if hard else "soft"
+        self._logger.info(f"Стоп-слова: пост {post_id} → совпадение {words} ({role})")
+        return StopMatch(words=words, hard=hard)
 
-        self._logger.debug(f"Стоп-слова: пост {post_id} → OK")
-        return False
+    def should_skip(self, post: Post) -> bool:
+        """True, если сработало хотя бы одно жёсткое стоп-слово (с '!')."""
+        m = self.matched(post)
+        return m is not None and m.hard
 
     def log_summary(self) -> None:
-        """Логирует сводку: достигло фильтра N, отсеяно M (X%)."""
+        """Логирует сводку: в режиме review — помечено для LLM, иначе — отсеяно."""
+        if self._config.filter_mode == "review":
+            self._logger.info(
+                f"Стоп-слова: проверено {self._checked}, помечено {self._matched} для LLM"
+            )
+            return
         pct = round(self._skipped / self._checked * 100, 1) if self._checked else 0.0
         self._logger.info(
-            f"Стоп-слова: достигло фильтра {self._checked}, отсеяно {self._skipped} ({pct}%)"
+            f"Стоп-слова: проверено {self._checked}, отсеяно {self._skipped} ({pct}%)"
         )

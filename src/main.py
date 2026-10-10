@@ -31,7 +31,10 @@ def _acquire_lock() -> FileLock:
 
 
 def main() -> None:
-    """Точка входа CLI: парсит аргументы, создаёт AutoLiker, выполняет команду."""
+    """Точка входа CLI: парсит аргументы, создаёт AutoLiker, выполняет команду.
+
+    Ctrl+C завершает процесс с кодом 130; finally закрывает браузер, базу и lock.
+    """
     parser = argparse.ArgumentParser(description="VkAutoLiker — автолайкер ВКонтакте")
     subparsers = parser.add_subparsers(dest="command", help="Доступные команды")
 
@@ -77,6 +80,11 @@ def main() -> None:
     except ValueError as e:
         print(f"Ошибка: {e}", file=sys.stderr)
         sys.exit(1)
+    except KeyboardInterrupt:
+        # Ctrl+C — штатное прерывание на любом этапе (старт браузера, проверка
+        # авторизации, jitter): трейсбэк не нужен, очистку делает finally
+        print("Прервано (Ctrl+C)", file=sys.stderr)
+        sys.exit(130)
     finally:
         if liker is not None:
             liker.close()

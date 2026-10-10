@@ -31,12 +31,13 @@ class TestSettings:
 
         assert s.service_token.get_secret_value() == ""
         assert s.api_version == "5.131"
-        assert s.likes_per_session_min == 20
-        assert s.likes_per_session_max == 30
+        assert s.likes_per_session_min == 40
+        assert s.likes_per_session_max == 50
         assert s.days_back == 30
         assert s.filter_mode == "stop_words"
         assert s.queries == []
         assert s.llm_timeout == 60
+        assert s.llm_max_text_length == 1000
         assert s.min_friends_to_poll == 20
 
     def test_secret_str_masks_token(self, mock_config_data, monkeypatch):
@@ -72,7 +73,7 @@ class TestSettings:
         assert s.llm_api_key.get_secret_value() == "test-llm-key"
         assert s.llm_timeout == 10
         assert s.llm_max_tokens == 1000
-        assert s.llm_max_text_length == 500
+        assert s.llm_max_text_length == 1000
         assert s.llm_ssl_verify is True
 
     def test_limits_fields(self, mock_config_data, monkeypatch):
@@ -142,6 +143,35 @@ class TestValidation:
         monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
         with pytest.raises(ValidationError):
             Settings(_env_file=None, filter_mode="llm", llm_model="")
+
+    def test_filter_mode_review_without_llm_raises(self, monkeypatch):
+        """filter_mode='review' без LLM (model + key) вызывает ValidationError."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, filter_mode="review", llm_model="")
+
+    def test_filter_mode_llm_without_api_key_raises(self, monkeypatch):
+        """filter_mode='llm' без llm_api_key (half-конфиг) вызывает ValidationError."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, filter_mode="llm", llm_model="openai/gpt-4o-mini")
+
+    def test_filter_mode_review_without_api_key_raises(self, monkeypatch):
+        """filter_mode='review' без llm_api_key (half-конфиг) вызывает ValidationError."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, filter_mode="review", llm_model="openai/gpt-4o-mini")
+
+    def test_filter_mode_stop_words_allows_half_llm(self, monkeypatch):
+        """filter_mode='stop_words' не требует LLM: half-конфиг LLM не ошибка."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        s = Settings(_env_file=None, filter_mode="stop_words", llm_model="openai/gpt-4o-mini")
+
+        assert s.filter_mode == "stop_words"
 
     def test_min_greater_than_max_raises(self, monkeypatch):
         """likes_per_session_min > max вызывает ValidationError."""

@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -5,6 +6,19 @@ from unittest.mock import MagicMock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+
+@pytest.fixture(autouse=True)
+def _clean_vk_env(monkeypatch):
+    """Удаляет VK_* из os.environ перед каждым тестом.
+
+    litellm при импорте выполняет load_dotenv() и грузит .env проекта
+    в окружение процесса — содержимое .env (режим, LLM-ключи) начинает
+    влиять на Settings(_env_file=None) во всех последующих тестах.
+    """
+    for key in list(os.environ):
+        if key.startswith("VK_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture
@@ -36,7 +50,7 @@ def mock_config_data():
         "min_friends_to_poll": 0,
         "max_groups_to_collect": 100,
         "days_back": 7,
-        "stop_words": ["политика"],
+        "stop_words": ["политика!"],
         "stop_words_file": "",
         "filter_mode": "stop_words",
         "likes_per_session_min": 3,
@@ -57,7 +71,7 @@ def mock_config_data():
         "llm_stop_topics": ["политика", "религия"],
         "llm_timeout": 10,
         "llm_max_tokens": 1000,
-        "llm_max_text_length": 500,
+        "llm_max_text_length": 1000,
         "llm_ssl_verify": True,
         "closed_wall_ttl_days": 7,
         "profile_max_size_mb": 500,
