@@ -167,8 +167,9 @@ pytest -m "not browser and not live"    # базовая страховка по
   `_newsfeed_search`, `_rate_limit`).
 - **Исключения:** доменные ошибки (`VKApiError`, `CaptchaError`), а не голые `Exception`.
   Ошибки обработки одного поста логируются и не роняют сессию (`try/except` + `continue`).
-- **`main.py`** перехватывает только `FileNotFoundError` и `ValueError` → текст в `stderr`
-  и `sys.exit(1)`.
+- **`main.py`** перехватывает `FileNotFoundError`/`ValueError` → текст в `stderr` и
+  `sys.exit(1)`, `KeyboardInterrupt` → `Прервано (Ctrl+C)` в `stderr` и `sys.exit(130)`
+  — Ctrl+C на любом этапе (старт браузера, проверка авторизации, jitter) не даёт трейсбэка.
 - Пиковая длина строки — около 100 символов; `snake_case` для функций/атрибутов,
   `PascalCase` для классов, `UPPER_SNAKE` для констант.
 

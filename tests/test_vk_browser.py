@@ -65,6 +65,20 @@ class TestVKBrowserIsLoggedIn:
         with patch("browser.vk_browser.time.sleep"):
             assert browser.is_logged_in() is False
 
+    def test_logged_in_logs_check_start(self, mock_config, mock_logger, caplog):
+        """Старт проверки логируется: навигация на vk.ru может идти долго."""
+        import logging
+
+        browser = VKBrowser(mock_config, mock_logger)
+        browser._driver = MagicMock()
+        browser._driver.get_cookies.return_value = []
+        with (
+            patch("browser.vk_browser.time.sleep"),
+            caplog.at_level(logging.INFO, logger="vk_autoliker"),
+        ):
+            assert browser.is_logged_in() is False
+        assert "Проверка авторизации..." in caplog.text
+
 
 class TestVKBrowserClose:
     def test_close_quits_driver_and_cleans_cache(self, mock_config, mock_logger):
