@@ -2,10 +2,10 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-201%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-83%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-230%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
-![Scheduling](https://img.shields.io/badge/scheduling-launchd%20%2B%20Task%20Scheduler-lightgrey)
+![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -144,6 +144,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `python src/main.py test` | Диагностика: поиск + лайк на одном посте |
 | `python src/main.py status` | Статистика: сессии/лайки за сегодня и всего |
 | `python src/main.py reset` | Очистка SQLite (обработанные посты, сессии, кэш стен) |
+| `python src/main.py bot` | VK-бот: резидентный long polling — старт/статус/помощь из VK |
 | `pytest` | Запуск тестов |
 | `pytest -m "not browser and not live"` | Только юнит-тесты (без браузера и сети) |
 | `pytest --cov=src --cov-report=term-missing` | Тесты с покрытием |
@@ -260,6 +261,15 @@ VK_LLM_SSL_VERIFY=false
 > `llm_max_tokens` слишком мал, все токены уйдут на размышление и ответ
 > останется пустым. Дефолт `1000` — запас для reasoning + ответ.
 
+### VK-бот
+
+| Параметр | Переменная | Описание |
+|---|---|---|
+| bot_token | VK_BOT_TOKEN | Токен Bot API (SecretStr); пусто — бот отключён |
+
+Токен: сообщество → Настройки → Bot API → включить → «Получить токен доступа».
+Команды и автозапуск — в разделе [Автоматизация](#автоматизация).
+
 ## Источники постов
 
 Посты собираются с приоритетом (лимит расходуется в порядке):
@@ -318,7 +328,7 @@ VK_LLM_SSL_VERIFY=false
 - **ActionChains** — клик с реальной траекторией мыши (`move_to_element` + пауза + `click`)
 - Персистентный Chrome-профиль — VK видит того же пользователя, что и при ручном входе
 - Все задержки рандомизируются: пауза между лайками 15–60 сек, «чтение» 5–15 сек
-- Jitter для launchd: 0–30 мин перед стартом (auto-режим)
+- Jitter для автозапуска: 0–30 мин перед стартом (auto-режим)
 - Burst-смягчение: каждые 5–10 лайков — пауза 60–180 сек
 - Человеческое поведение: скролл, движение мыши, паузы «чтения»
 - Друзья/группы — случайная выборка каждую сессию
@@ -328,60 +338,81 @@ VK_LLM_SSL_VERIFY=false
 
 ## Автоматизация
 
-### macOS (launchd)
+### VK-бот (резидент)
 
-Файл `~/Library/LaunchAgents/ru.vkautoliker.plist` запускает `run` 3 раза в день:
-10:00, 14:00, 19:00.
+Бот — резидентный процесс (long polling): слушает сообщения в сообществе VK
+и запускает сессии по команде `старт`. Mac должен быть включён и залогинен в
+VK-сессию (профиль Chrome), иначе сессии не запустятся.
 
-```bash
-# Создать plist (пример — скорректируйте путь к проекту и Python)
-cat > ~/Library/LaunchAgents/ru.vkautoliker.plist << 'EOF'
+1. Сообщество с включённым **Bot API** (Настройки → Bot API → включить →
+   «Получить токен доступа»).
+2. `.env`: `VK_BOT_TOKEN=<токен>`.
+3. Запуск: `python src/main.py bot` — бот работает, пока открыто окно
+   (терминал/PyCharm). Это основной способ запуска.
+
+**Автозапуск без окна (опционально), Mac (launchd):**
+
+Сохранить plist в `~/Library/LaunchAgents/ru.vkautoliker.bot.plist`
+(скорректировать пути к проекту и Python):
+
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key><string>ru.vkautoliker</string>
+    <key>Label</key><string>ru.vkautoliker.bot</string>
     <key>ProgramArguments</key>
     <array>
         <string>/путь/к/.venv/bin/python</string>
         <string>/путь/к/VkAutoLiker/src/main.py</string>
-        <string>run</string>
+        <string>bot</string>
     </array>
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict><key>Hour</key><integer>10</integer></dict>
-        <dict><key>Hour</key><integer>14</integer></dict>
-        <dict><key>Hour</key><integer>19</integer></dict>
-    </array>
-    <key>RunAtLoad</key><false/>
+    <key>WorkingDirectory</key><string>/путь/к/VkAutoLiker</string>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
     <key>StandardOutPath</key><string>/dev/null</string>
-    <key>StandardErrorPath</key><string>/путь/к/VkAutoLiker/vk_autoliker.stderr.log</string>
+    <key>StandardErrorPath</key><string>/путь/к/VkAutoLiker/vk_autoliker_bot.stderr.log</string>
 </dict>
 </plist>
-EOF
-
-launchctl load ~/Library/LaunchAgents/ru.vkautoliker.plist      # включить
-launchctl unload ~/Library/LaunchAgents/ru.vkautoliker.plist    # выключить
-launchctl list | grep vkautoliker                               # статус
 ```
 
-`run` (без `--no-limit`) считается автозапуском (`is_auto=1`) и расходует дневной лимит.
-`run --no-limit` — ручной запуск, лимит не тратится.
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ru.vkautoliker.bot.plist   # включить
+launchctl bootout gui/$(id -u)/ru.vkautoliker.bot                                 # выключить
+launchctl list | grep vkautoliker                                                 # статус
+```
+
+Команды (сообщение в сообществе, отвечает только владельцу аккаунта):
+
+| Команда | Действие |
+|---|---|
+| `старт` / `start` | запуск сессии (`run --no-limit`); если уже идёт — «Сессия уже идёт» |
+| `статус` / `status` | статус: идущая сессия (или последняя), за сегодня и всего |
+| `помощь` / `help` | список команд |
+
+`старт` запускает сессию отдельным процессом (flock процессный — резидент
+сам не может вести сессию); по завершении приходит отдельное сообщение
+«Сессия завершена: лайков N…».
+
+> **Авто-расписание Mac (launchd, 3 запуска/день) удалено** — сессии запускаются
+> через VK-бота (`старт`) и вручную.
+>
+> `run` (без `--no-limit`) считается автозапуском (`is_auto=1`) и расходует дневной лимит.
+> `run --no-limit` — ручной запуск, лимит не тратится.
 
 ### Windows (Task Scheduler)
 
+Автозапуск бота (опционально): задача при входе в систему + перезапуск
+при сбое (свойства задачи → Настройки → «Перезапускать задачу в случае
+сбоев», через 1 минуту):
+
 ```powershell
-# 3 задачи: 10:00, 14:00, 19:00 (скорректируйте пути)
-schtasks /create /tn "VkAutoLiker_10" /tr "C:\VkAutoLiker\.venv\Scripts\python.exe C:\VkAutoLiker\src\main.py run" /sc daily /st 10:00 /f
-schtasks /create /tn "VkAutoLiker_14" /tr "C:\VkAutoLiker\.venv\Scripts\python.exe C:\VkAutoLiker\src\main.py run" /sc daily /st 14:00 /f
-schtasks /create /tn "VkAutoLiker_19" /tr "C:\VkAutoLiker\.venv\Scripts\python.exe C:\VkAutoLiker\src\main.py run" /sc daily /st 19:00 /f
+schtasks /create /tn "VkAutoLiker_Bot" /tr "C:\VkAutoLiker\.venv\Scripts\python.exe C:\VkAutoLiker\src\main.py bot" /sc onlogon /f
 ```
 
-Альтернатива — через GUI: Task Scheduler → Create Basic Task → Daily → Start a program.
-
 ```powershell
-schtasks /query /tn "VkAutoLiker_*"       # статус
-schtasks /delete /tn "VkAutoLiker_10" /f  # удалить задачу
+schtasks /query /tn "VkAutoLiker_Bot"      # статус
+schtasks /delete /tn "VkAutoLiker_Bot" /f  # удалить задачу
 ```
 
 **Примечание:** защита от двойного запуска работает и на Windows — через

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Точка входа CLI: login | run | test | status | reset."""
+"""Точка входа CLI: login | run | test | status | reset | bot."""
 
 import argparse
 import sys
@@ -7,21 +7,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from commands import Commands
 from file_lock import FileLock
 from liker import AutoLiker
 from logger import AppLogger
 from settings import get_settings
+from vk_autoliker_bot import VkAutoLikerBot
 
-# Файл-блокировка: предотвращает двойной запуск (launchd может стартовать 2 процесса)
+# Файл-блокировка: предотвращает двойной запуск (два процесса одновременно)
 _LOCK_FILE = Path(__file__).parent / ".autoliker.lock"
 
 
 def _acquire_lock() -> FileLock:
     """Захватывает эксклюзивную блокировку. При неудаче — выход.
 
-    launchd иногда стартует процесс дважды в один слот. Без блокировки
-    второй процесс убивает Chrome первого через _kill_stale_chrome(),
-    после чего первый работает с мёртвой сессией (invalid session id).
+    Два одновременных запуска без блокировки: второй процесс убивает
+    Chrome первого через _kill_stale_chrome(), после чего первый работает
+    с мёртвой сессией (invalid session id).
     """
     lock = FileLock(_LOCK_FILE)
     if not lock.acquire():
@@ -48,17 +50,28 @@ def main() -> None:
     subparsers.add_parser("test", help="Тест поиска и лайка на одном посте")
     subparsers.add_parser("status", help="Показать статистику сессий и лайков")
     subparsers.add_parser("reset", help="Очистить базу состояния")
+    subparsers.add_parser("bot", help="Запустить VK-бота (long polling, резидентный демон)")
 
     args = parser.parse_args()
 
     command = args.command or "run"
 
-    lock = _acquire_lock()
-
+    lock: FileLock | None = None
     liker: AutoLiker | None = None
     try:
         config = get_settings()
         logger = AppLogger(config)
+
+        if command == "bot":
+            # Демон не берёт сессионную блокировку: он резидентный, и взял
+            # бы её — заблокировал все сессии
+            if not config.bot_token.get_secret_value():
+                print("VK_BOT_TOKEN не задан в .env", file=sys.stderr)
+                sys.exit(1)
+            VkAutoLikerBot(config, logger).run()
+            return
+
+        lock = _acquire_lock()
         liker = AutoLiker(config, logger)
 
         if command == "login":
@@ -68,7 +81,7 @@ def main() -> None:
         elif command == "test":
             liker.test()
         elif command == "status":
-            liker.status()
+            print(Commands(config, logger).status())
         elif command == "reset":
             liker.reset()
         else:
@@ -88,7 +101,8 @@ def main() -> None:
     finally:
         if liker is not None:
             liker.close()
-        lock.release()
+        if lock is not None:
+            lock.release()
 
 
 if __name__ == "__main__":

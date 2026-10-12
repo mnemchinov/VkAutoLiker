@@ -75,6 +75,7 @@ def mock_config_data():
         "llm_ssl_verify": True,
         "closed_wall_ttl_days": 7,
         "profile_max_size_mb": 500,
+        "bot_token": "test-bot-token",
     }
 
 

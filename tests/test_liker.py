@@ -117,6 +117,8 @@ class TestRun:
             liker.run(no_limit=True)
 
         assert liker._posts_repo.mark_processed.call_count == 3
+        assert liker._sessions_repo.update_session_likes.call_count == 3
+        liker._sessions_repo.update_session_likes.assert_called_with(1, 3)
 
     def test_already_liked_skipped_and_marked(self, liker, mock_config):
         """Уже лайкнутый пост → mark_processed, like() вызван, возвращает ALREADY_LIKED."""

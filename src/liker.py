@@ -198,6 +198,8 @@ class AutoLiker:
 
                     if result == LikeResult.LIKED:
                         likes_count += 1
+                        # Промежуточный статус: текущее число лайков видно в status()
+                        self._sessions_repo.update_session_likes(session_id, likes_count)
                         likes_since_break += 1
                         captcha_streak = 0
                         self._posts_repo.mark_processed(
@@ -269,21 +271,6 @@ class AutoLiker:
                 f"=== Сессия завершена: лайков {likes_count}. "
                 f"Всего: сессий {total_sessions}, лайков {total_likes} ==="
             )
-
-    def status(self) -> None:
-        """Выводит статистику сессий и лайков (за сегодня и всего).
-
-        Авто-сессии (launchd) и ручные (--no-limit) показываются раздельно.
-        """
-        total_sessions, total_likes = self._sessions_repo.get_total_stats()
-        auto_today, auto_likes_today = self._sessions_repo.get_daily_stats()
-        manual_sessions, manual_likes = self._sessions_repo.get_manual_stats()
-        self._logger.info(
-            f"Статус: авто сегодня={auto_today}/{self._config.sessions_per_day} "
-            f"сессий/{auto_likes_today} лайков, "
-            f"ручных={manual_sessions} сессий/{manual_likes} лайков, "
-            f"всего={total_sessions} сессий/{total_likes} лайков"
-        )
 
     def reset(self) -> None:
         """Очищает SQLite-базу (обработанные посты и сессии)."""

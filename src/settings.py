@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     Лимиты/задержки: likes_per_session_min/max, sessions_per_day, delays, max_captcha_streak.
     Логирование: log_level, log_file.
     SQLite: db_path.
+    VK-бот: bot_token.
     """
 
     model_config = SettingsConfigDict(
@@ -120,6 +121,9 @@ class Settings(BaseSettings):
 
     # Профиль Chrome
     profile_max_size_mb: int = 500
+
+    # VK-бот (long polling): запуск сессий и статус из сообщений VK
+    bot_token: SecretStr = SecretStr("")
 
     @field_validator(
         "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"

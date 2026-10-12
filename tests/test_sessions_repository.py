@@ -1,12 +1,13 @@
 """Unit-тесты репозитория сессий SessionsRepository.
 
 Тестирует: start_session, end_session, get_daily_stats, get_total_stats,
-get_manual_stats, reset. Использует реальную SQLite-БД.
+get_today_stats, get_running_session, get_last_session, update_session_likes,
+reset. Использует реальную SQLite-БД.
 """
 
 from database import Database
 from migrations import run_migrations
-from repositories import SessionsRepository, SessionStats
+from repositories import LastSession, SessionsRepository, SessionStats
 
 
 class TestSessionsRepository:
@@ -42,10 +43,6 @@ class TestSessionsRepository:
         auto_stats = repo.get_daily_stats()
         assert auto_stats.sessions == 1
         assert auto_stats.likes == 5
-
-        manual_stats = repo.get_manual_stats()
-        assert manual_stats.sessions == 1
-        assert manual_stats.likes == 10
         db.close()
 
     def test_multiple_sessions_daily(self, mock_config, tmp_path):
@@ -109,4 +106,71 @@ class TestSessionsRepository:
         stats = repo.get_total_stats()
         assert stats.sessions == 0
         assert stats.likes == 0
+        db.close()
+
+    def test_get_last_session(self, mock_config, tmp_path):
+        """get_last_session — последняя за сегодня (по id) или None."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        assert repo.get_last_session() is None
+
+        sid1 = repo.start_session(is_auto=False)
+        repo.end_session(sid1, likes_count=7)
+        sid2 = repo.start_session(is_auto=False)
+        repo.end_session(sid2, likes_count=3)
+
+        last = repo.get_last_session()
+        assert isinstance(last, LastSession)
+        assert last.id == sid2
+        assert last.likes == 3
+        assert last.ended_at > 0
+        assert last.started_at > 0
+
+        # идущая сессия (ended_at IS NULL) — не «последняя завершённая»
+        repo.start_session(is_auto=False)
+        assert repo.get_last_session().id == sid2
+        db.close()
+
+    def test_get_today_stats_counts_all_sessions(self, mock_config, tmp_path):
+        """get_today_stats — все запуски за сегодня, без разделения авто/ручные."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        assert repo.get_today_stats().sessions == 0
+
+        sid_auto = repo.start_session(is_auto=True)
+        repo.end_session(sid_auto, likes_count=5)
+        sid_manual = repo.start_session(is_auto=False)
+        repo.end_session(sid_manual, likes_count=10)
+
+        stats = repo.get_today_stats()
+        assert stats.sessions == 2
+        assert stats.likes == 15
+        db.close()
+
+    def test_get_running_session_and_update_likes(self, mock_config, tmp_path):
+        """get_running_session — идущая сессия; update_session_likes — лайки в полёте."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        assert repo.get_running_session() is None
+
+        sid = repo.start_session(is_auto=False)
+        repo.update_session_likes(sid, likes_count=3)
+        running = repo.get_running_session()
+        assert isinstance(running, LastSession)
+        assert running.id == sid
+        assert running.likes == 3
+        assert running.ended_at == 0
+        assert running.started_at > 0
+
+        repo.end_session(sid, likes_count=5)
+        assert repo.get_running_session() is None
         db.close()

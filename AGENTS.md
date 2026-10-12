@@ -47,8 +47,10 @@ requirements.txt       — зависимости
 README.md              — документация проекта
 .gitignore             — исключения (chrome_profile, *.db, *.log, .venv и т.д.)
 src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, vk_api/, repositories/, migrations/)
-  main.py              — CLI-точка входа (login|run|test|status|reset)
+  main.py              — CLI-точка входа (login|run|test|status|reset|bot)
   file_lock.py         — FileLock: кроссплатформенная файловая блокировка (fcntl/msvcrt)
+  commands.py          — Commands: команды проекта (status, help, start) — не знают про транспорт
+  vk_autoliker_bot.py  — VkAutoLikerBot: VK-бот (long polling), запуск/статус из VK
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
@@ -65,7 +67,7 @@ tests/                 — pytest-тесты, conftest.py с фикстурам�
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset)
 chrome_profile/        — профиль Chrome (в .gitignore), хранит сессию VK
-~/Library/LaunchAgents/ru.vkautoliker.plist — launchd-расписание (3 запуска/день)
+~/Library/LaunchAgents/ru.vkautoliker.bot.plist — автозапуск VK-бота (launchd, опционально; основной запуск — вручную, `python src/main.py bot`); авто-расписание Mac (ru.vkautoliker.plist) удалено
 ```
 
 **Важно про импорты:** импорты плоские по имени файла/пакета
@@ -99,9 +101,13 @@ python src/main.py login    # 1-й шаг: открыть Chrome для ручн
 python src/main.py run      # 2-й шаг: основная сессия лайкинга
 python src/main.py run --no-limit  # ручной запуск без учёта дневного лимита (is_auto=0)
 python src/main.py test     # диагностика: проверка API-поиска + лайк на одном посте
-python src/main.py status   # статистика: сессии/лайки за сегодня и всего
+python src/main.py status   # статус: идущая/последняя сессия, за сегодня и всего
 python src/main.py reset    # полная очистка SQLite-базы (обработанные посты и сессии)
+python src/main.py bot      # VK-бот: резидентный long polling — старт/статус/помощь из VK
 ```
+
+**Авто-расписание Mac (launchd) удалено** — сессии запускаются через VK-бота
+(команда `старт` из сообщения) и вручную.
 
 **Порядок обязательный:** сначала `login` (команда форсирует `headless=False` независимо
 от `Settings.headless` — нужен видимый экран для 2FA), далее сессия сохраняется в
@@ -119,11 +125,11 @@ python src/main.py reset    # полная очистка SQLite-базы (об�
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (201 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (230 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (83%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -133,7 +139,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (83%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 201 тест, маркер не нужен.
+- Юнит-тесты на моках — 230 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -141,7 +147,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (83%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings, commands, vk_autoliker_bot; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
 ```
 
 ---
@@ -337,12 +343,32 @@ pytest -m "not browser and not live"    # базовая страховка по
     Парсится в `_parse_wall_item()` и `_parse_newsfeed_item()`.
     `CollectStage._accept()` исключает посты где `from_id == config.user_id` —
     лайкать собственные посты на стенах групп и друзей не нужно.
+23. **VK-бот.** `VkAutoLikerBot` — резидентный long-polling-демон (`python src/main.py bot`,
+    запуск вручную; автозапуск — launchd/Task Scheduler, опционально, см. README). Демон
+    **не берёт сессионную
+    блокировку** `.autoliker.lock` (завис в ней — заблокировал бы все сессии); у него своя
+    блокировка `.autoliker.bot.lock` против второго демона. Команды — методы класса
+    `Commands` (status/help/start); мапа команд (старт/статус/помощь) живёт в транспорте,
+    а не в `Commands`. Текст входящих сообщений **никогда не шёлл-ится** — только
+    фиксированная мапа команд, и только от владельца (`from_id == user_id`).
+    Собственные ответы бота возвращаются событием — отсекаются трекингом
+    собственных `random_id`/`message_id` (`_sent_ids`): поле `flags` VK — не
+    надёжный дискриминатор (входящие владельца приходят с flags=1 и flags=3). `Commands.start`
+    запускает сессию отдельным процессом (`main.py run --no-limit`), потому что flock
+    процессный: сессия в процессе демона была бы заблокирована собственной блокировкой
+    демона; итог — отдельное сообщение по завершении (данные из `sessions`, не из stdout).
+    Тред отчёта открывает собственное SQLite-подключение: коннект не переносится
+    между тредами (`sqlite3` по умолчанию `check_same_thread=True`).
+    Бот ходит в Bot API своим токеном (`bot_token`, env `VK_BOT_TOKEN`) напрямую
+    `requests` — не через `VKApiClient` (другой токен, long polling — цикл, а не
+    rate-limit-вызовы). Старт демона ретраится: ошибка VK на `getLongPollServer`/long
+    polling — рандомная задержка и повтор (резидент не должен умирать на старте).
 
 ### Практики тестирования
 
 - Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestVkApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
-  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`.
+  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`, `TestCommands`, `TestVkAutoLikerBot`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
   `patch("vk_api.vk_api_client.requests.get")` и `patch("vk_api.vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.
