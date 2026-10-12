@@ -251,6 +251,15 @@ pytest -m "not browser and not live"    # базовая страховка по
 11. **Источник лайков в приоритетном порядке:** queries → hashtags → groups → accounts →
     auto_friends → auto_groups. Каждый следующий источник собирается только если
     предыдущие не набрали `enough` постов. Финального перемешивания между источниками нет.
+    **Список `auto_groups` неполный и нестабильный:** `groups.get` через service-токен
+    (токен сообщества, `users.get` им → пусто) возвращает список, который плавает по дням:
+    11.10 — 79 групп, сообщества со скрытым составом участников отсутствовали
+    (`groups.isMember` для них → «access to the group members is denied»); 12.10 — 90,
+    совпадает со списком сессии юзера. На `auto_groups` для конкретных сообществ
+    полагаться нельзя. Покрывает явный `groups`-источник (`VK_GROUPS`):
+    `resolveScreenName` + `wall.get` по ID работают независимо от видимости списка
+    участников и полноты `groups.get`. Новое сообщество, которое обязано попадать
+    в пул, — добавлять его `screen_name` в `VK_GROUPS` вручную.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
     использующие `chrome_profile/` (на POSIX — `pgrep` + `SIGTERM`, на Windows — PowerShell
     CIM + `SIGTERM`), удаляет lock-файлы (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
