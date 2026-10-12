@@ -8,18 +8,20 @@ run_migrations проверяет текущую версию и применя�
   1 — созданы таблицы (m001_create_tables).
   2 — добавлена колонка is_auto (m002_add_is_auto).
   3 — добавлена колонка status (m003_add_status).
+  4 — добавлена колонка pid в sessions (m004_add_pid).
 """
 
 import sqlite3
 
-from migrations import m001_create_tables, m002_add_is_auto, m003_add_status
+from migrations import m001_create_tables, m002_add_is_auto, m003_add_status, m004_add_pid
 
-LATEST_VERSION = 3
+LATEST_VERSION = 4
 
 _MIGRATIONS = [
     m001_create_tables.upgrade,
     m002_add_is_auto.upgrade,
     m003_add_status.upgrade,
+    m004_add_pid.upgrade,
 ]
 
 

@@ -4,6 +4,7 @@
 отчёты о завершении — прямые вызовы _report_completion на мок-процессе.
 """
 
+import subprocess
 import sys
 import threading
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,13 @@ from commands import Commands
 from database import Database
 from file_lock import FileLock
 from migrations import run_migrations
+
+
+def _dead_pid() -> int:
+    """pid завершившегося процесса — для тестов зомби-сессий."""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
 
 
 class TestCommands:
@@ -82,6 +90,37 @@ class TestCommands:
         text = commands.stop()
         commands._stop_flag.touch.assert_called_once()
         assert "нет" in text.lower()
+
+    def test_stop_with_zombie_session_says_no_session(self, mock_config, mock_logger, tmp_path):
+        """stop() — зомби-сессия (мёртвый pid) закрывается, «идущей сессии нет»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        commands._stop_flag = MagicMock()
+        repo = commands._sessions_repo
+        zombie = repo.start_session(is_auto=False, pid=_dead_pid())
+
+        text = commands.stop()
+
+        assert "нет" in text.lower()
+        commands._stop_flag.touch.assert_called_once()
+        row = commands._db.conn.execute(
+            "SELECT ended_at FROM sessions WHERE id = ?", (zombie,)
+        ).fetchone()
+        assert row[0] is not None
+
+    def test_status_closes_zombie_session(self, mock_config, mock_logger, tmp_path):
+        """status() — зомби-сессия закрывается и видна как «последняя завершённая»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        zombie = repo.start_session(is_auto=False, pid=_dead_pid())
+
+        text = commands.status()
+
+        assert "Сессия идёт" not in text
+        assert "Последняя: " in text
+        row = commands._db.conn.execute(
+            "SELECT ended_at FROM sessions WHERE id = ?", (zombie,)
+        ).fetchone()
+        assert row[0] is not None
 
     def test_start_clears_stale_stop_flag(self, mock_config, mock_logger, tmp_path):
         """start() снимает устаревший флаг — случайный стоп не убьёт новую сессию."""

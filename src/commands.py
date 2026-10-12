@@ -61,11 +61,14 @@ class Commands:
         Если сессии нет, флаг всё равно ставится и будет снят clear()
         при следующем старте.
         """
+        closed = self._sessions_repo.close_zombie_sessions()
+        if closed:
+            self._logger.info(f"Зомби-сессий закрыто: {closed}")
         running = self._sessions_repo.get_running_session()
         self._stop_flag.touch()
         if running is None:
             return "Идущей сессии нет (флаг остановки снятится при следующем старте)"
-        return "Запрошена остановка сессии"
+        return "Запрошена остановка сессии, ожидайте сообщение о результате..."
 
     def status(self) -> str:
         """Возвращает статус: всего, за сегодня и третья строка —
@@ -78,6 +81,11 @@ class Commands:
             f"Сегодня: {today.sessions} {_plural(today.sessions, 'запуск', 'запуска', 'запусков')}, "
             f"{today.likes} {_plural(today.likes, 'лайк', 'лайка', 'лайков')}",
         ]
+        # До get_running_session: зомби (ended_at NULL, процесс мёртв) иначе
+        # навсегда выглядели бы «идущей» сессией
+        closed = self._sessions_repo.close_zombie_sessions()
+        if closed:
+            self._logger.info(f"Зомби-сессий закрыто: {closed}")
         running = self._sessions_repo.get_running_session()
         if running is not None:
             since = datetime.fromtimestamp(running.started_at).strftime("%H:%M")

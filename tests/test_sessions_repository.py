@@ -5,9 +5,21 @@ get_today_stats, get_running_session, get_last_session, update_session_likes,
 reset. Использует реальную SQLite-БД.
 """
 
+import os
+import subprocess
+import sys
+
 from database import Database
 from migrations import run_migrations
 from repositories import LastSession, SessionsRepository, SessionStats
+from repositories.sessions_repository import _pid_alive
+
+
+def _dead_pid() -> int:
+    """pid завершившегося процесса — для тестов зомби-сессий."""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
 
 
 class TestSessionsRepository:
@@ -173,4 +185,67 @@ class TestSessionsRepository:
 
         repo.end_session(sid, likes_count=5)
         assert repo.get_running_session() is None
+        db.close()
+
+    def test_start_session_records_pid(self, mock_config, tmp_path):
+        """start_session — в строке pid процесса (по умолчанию os.getpid())."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        sid = repo.start_session(is_auto=False)
+        row = db.conn.execute("SELECT pid FROM sessions WHERE id = ?", (sid,)).fetchone()
+        assert row[0] == os.getpid()
+
+        dead = _dead_pid()
+        sid2 = repo.start_session(is_auto=False, pid=dead)
+        row2 = db.conn.execute("SELECT pid FROM sessions WHERE id = ?", (sid2,)).fetchone()
+        assert row2[0] == dead
+        db.close()
+
+    def test_pid_alive_detection(self):
+        """_pid_alive — живой pid (свой) True, мёртвый False."""
+        assert _pid_alive(os.getpid()) is True
+        assert _pid_alive(_dead_pid()) is False
+
+    def test_close_zombie_sessions(self, mock_config, tmp_path):
+        """Зомби (мёртвый pid, NULL pid) закрываются, живая сессия нет.
+
+        likes_count зомби сохраняется; повторный вызов идемпотентен.
+        """
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        # Зомби с мёртвым pid: лайки были реальны, до закрытия
+        zombie = repo.start_session(is_auto=False, pid=_dead_pid())
+        repo.update_session_likes(zombie, likes_count=7)
+
+        # Живая сессия — pid процесса теста
+        live = repo.start_session(is_auto=False)
+
+        # Легаси-строка (до m004): pid NULL
+        legacy = repo.start_session(is_auto=False)
+        db.conn.execute("UPDATE sessions SET pid = NULL WHERE id = ?", (legacy,))
+        db.conn.commit()
+
+        closed = repo.close_zombie_sessions()
+        assert closed == 2
+
+        def row(sid):
+            return db.conn.execute(
+                "SELECT ended_at, likes_count FROM sessions WHERE id = ?", (sid,)
+            ).fetchone()
+
+        # Зомби и легаси закрыты, лайки зомби сохранены
+        assert row(zombie)[0] is not None
+        assert row(zombie)[1] == 7
+        assert row(legacy)[0] is not None
+        # Живая сессия не тронута
+        assert row(live)[0] is None
+
+        # Идемпотентность: повторный вызов не закрывает ничего
+        assert repo.close_zombie_sessions() == 0
         db.close()

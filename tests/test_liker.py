@@ -99,6 +99,26 @@ class TestRun:
         # start_session вызывается с is_auto=False
         liker._sessions_repo.start_session.assert_called_once_with(is_auto=False)
 
+    def test_run_closes_zombie_sessions_before_start(self, liker, mock_config):
+        """run() — зомби-сессии закрываются в начале, до start_session."""
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._sessions_repo.end_session = MagicMock()
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
+
+        order: list[str] = []
+        liker._sessions_repo.close_zombie_sessions = MagicMock(
+            side_effect=lambda: (order.append("close"), 1)[1]
+        )
+        liker._sessions_repo.start_session = MagicMock(
+            side_effect=lambda **kwargs: (order.append("start"), 1)[1]
+        )
+
+        with patch("liker.time.sleep"):
+            liker.run(no_limit=True)
+
+        assert order == ["close", "start"]
+
     def test_like_success_increments_count(self, liker, mock_config):
         """Успешный лайк → mark_processed, likes_count растёт."""
         posts = [_make_post(1, i) for i in range(3)]

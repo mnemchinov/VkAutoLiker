@@ -61,7 +61,7 @@ src/                   — весь код: плоские модули + пак
   post_filter/         — protocol, DateFilter, EmptyTextFilter, StopWordsFilter (matched/StopMatch), LLMTopicFilter, FilterChain
   stages/              — Pipeline + PipelineContext; CollectStage (6 источников, ранний выход), DedupStage, LLMFilterStage (review/llm)
   vk_api/              — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
-  migrations/          — миграции схемы через PRAGMA user_version (m001–m003)
+  migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
 stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (242 жёстких + 36 мягких)
 tests/                 — pytest-тесты, conftest.py с фикстурами
@@ -126,7 +126,7 @@ python src/main.py bot      # VK-бот: резидентный long polling —
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (252 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (259 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -140,7 +140,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 252 теста, маркер не нужен.
+- Юнит-тесты на моках — 259 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -400,6 +400,21 @@ pytest -m "not browser and not live"    # базовая страховка по
     60–90 сек (старт браузера + проверка авторизации); `Commands.start()` тоже снимает
     stale-флаг после захвата блокировки. Сессия — отдельный процесс, сигнал послать
     нечем — только файл. Флаг в `.gitignore`.
+24. **Зомби-сессии.** Строка `sessions` с `ended_at IS NULL` после жёсткой смерти
+    процесса (SIGKILL/сбой питания — `finally` в `run()` не выполняется) — зомби:
+    `status` вечно «Сессия идёт», `stop` «запрашивает остановку» у призрака. Строка
+    хранит `pid` процесса-создателя (m004; `start_session(is_auto, pid)` — дефолт
+    `os.getpid()`); зомби = мёртвый pid или NULL pid (легаси, до m004). Проверка
+    живости — `_pid_alive()`: POSIX — `os.kill(pid, 0)`, Windows — `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)`
+    через ctypes — `os.kill(pid, 0)` на Windows это `TerminateProcess`, проверка
+    живости убила бы процесс. `close_zombie_sessions()` (ставит `ended_at=now`,
+    `likes_count` сохраняет — лайки были реальны) вызывается в `Commands.status()`
+    и `Commands.stop()` перед `get_running_session()` (первый «статус» после краха
+    чинит БД) и в начале `AutoLiker.run()` (самоцеление при любом старте). Дневной
+    лимит ретроспективно не меняется: зомби с `is_auto=1` продолжает занимать слот
+    за свой день — сессия реально стартовала. Известное ограничение: повторное
+    использование OS pid мёртвой сессии новым процессом оставит зомби незымкнутым
+    (macOS pids оборачиваются на 99999 — вероятность пренебрежима).
 
 ### Практики тестирования
 

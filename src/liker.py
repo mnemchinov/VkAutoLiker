@@ -130,6 +130,11 @@ class AutoLiker:
         # «Сессия запущена», глотался 60–90 сек — старт браузера и
         # проверка авторизации
         self._stop_flag.clear()
+        # Зомби-сессии (ended_at NULL, процесс мёртв) закрываем до start_session:
+        # иначе «статус» и отчёт бота видели бы призрака «идущей» сессии
+        closed = self._sessions_repo.close_zombie_sessions()
+        if closed:
+            self._logger.info(f"Зомби-сессий закрыто: {closed}")
         self._browser.start()
         if not self._browser.is_logged_in():
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
