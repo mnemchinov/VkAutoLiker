@@ -44,6 +44,7 @@ chrome_profile/
 *.log
 .autoliker.lock
 .autoliker.bot.lock
+.autoliker.stop
 .env
 
 # Distribution

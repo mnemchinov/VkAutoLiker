@@ -54,12 +54,48 @@ class TestCommands:
         assert "Последняя" not in text
 
     def test_help_returns_command_list(self, mock_config, mock_logger, tmp_path):
-        """help() — список команд старт/статус/помощь."""
+        """help() — список команд старт/стоп/статус/помощь."""
         commands = self._make_commands(mock_config, mock_logger, tmp_path)
         text = commands.help()
         assert "старт" in text
+        assert "стоп" in text
         assert "статус" in text
         assert "помощь" in text
+
+    def test_stop_with_running_session_touches_flag(self, mock_config, mock_logger, tmp_path):
+        """stop() при идущей сессии — флаг поставлен, ответ «запрошена остановка»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        commands._stop_flag = MagicMock()
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        try:
+            text = commands.stop()
+        finally:
+            repo.end_session(sid, likes_count=0)
+        commands._stop_flag.touch.assert_called_once()
+        assert "остановка" in text.lower()
+
+    def test_stop_without_session_still_touches_flag(self, mock_config, mock_logger, tmp_path):
+        """stop() без идущей сессии — флаг всё равно ставится, ответ это отмечает."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        commands._stop_flag = MagicMock()
+        text = commands.stop()
+        commands._stop_flag.touch.assert_called_once()
+        assert "нет" in text.lower()
+
+    def test_start_clears_stale_stop_flag(self, mock_config, mock_logger, tmp_path):
+        """start() снимает устаревший флаг — случайный стоп не убьёт новую сессию."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        commands._stop_flag = MagicMock()
+        send = MagicMock()
+        with (
+            patch("commands._SESSION_LOCK", tmp_path / "session.lock"),
+            patch("commands.subprocess.Popen") as mock_popen,
+            patch("commands.threading.Thread"),
+        ):
+            mock_popen.return_value = MagicMock()
+            commands.start(send)
+        commands._stop_flag.clear.assert_called_once()
 
     def test_start_when_lock_busy_reports_and_does_not_spawn(
         self, mock_config, mock_logger, tmp_path

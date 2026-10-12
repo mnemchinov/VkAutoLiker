@@ -1,6 +1,6 @@
 """VK-бот: long polling-демон для запуска сессий и статуса.
 
-Транспорт VK: фиксированная мапа команд (старт/статус/помощь) — вызовы
+Транспорт VK: фиксированная мапа команд (старт/стоп/статус/помощь) — вызовы
 методов класса Commands; текст входящих сообщений не попадает в shell,
 обрабатываются только сообщения владельца (from_id == user_id).
 
@@ -9,6 +9,7 @@
 вызовы основного API.
 """
 
+import json
 import random
 import time
 from collections import deque
@@ -31,9 +32,34 @@ _REQUEST_TIMEOUT_SEC = 30
 # Компактный формат long polling: события — позиционные массивы,
 # параметры mode/version запрашивают полный набор полей (референс — vk_api)
 _EVENT_MESSAGE_NEW = 4
+_EVENT_MESSAGE_EVENT = 58
 _CHAT_PEER_START = 2_000_000_000
 _LP_MODE = 234
 _LP_VERSION = 3
+
+# JSON-строка inline-клавиатуры: одна строка, три кнопки
+_KEYBOARD_JSON = (
+    '{"inline":true,"one_time":false,"buttons":['
+    '[{"action":{"type":"text","label":"\\u25b6\\ufe0f \\u0421\\u0442\\u0430\\u0440\\u0442",'
+    '"payload":"{\\"command\\":\\"start\\"}"},"color":"positive"},'
+    '{"action":{"type":"text","label":"\\u23f9\\ufe0f \\u0421\\u0442\\u043e\\u043f",'
+    '"payload":"{\\"command\\":\\"stop\\"}"},"color":"negative"},'
+    '{"action":{"type":"text","label":"\\u2139\\ufe0f \\u0421\\u0442\\u0430\\u0442\\u0443\\u0441",'
+    '"payload":"{\\"command\\":\\"status\\"}"},"color":"primary"}]'
+    "]}"
+)
+
+
+_COMMAND_MAP: dict[str, str] = {
+    "старт": "start",
+    "start": "start",
+    "стоп": "stop",
+    "stop": "stop",
+    "статус": "status",
+    "status": "status",
+    "помощь": "help",
+    "help": "help",
+}
 
 
 class VkAutoLikerBot:
@@ -109,6 +135,10 @@ class VkAutoLikerBot:
         self._key = key
         self._logger.info("VK-бот: long polling-канал подключён")
 
+    def _keyboard(self) -> str:
+        """Возвращает JSON inline-клавиатуры (одна строка: Старт/Стоп/Статус)."""
+        return _KEYBOARD_JSON
+
     def _poll_once(self) -> None:
         """Один запрос a_check; события диспатчит по одному.
 
@@ -150,10 +180,20 @@ class VkAutoLikerBot:
         VK шлёт события позиционными массивами, а не словарями: первый
         элемент — код типа, далее поля в фиксированном порядке. MESSAGE_NEW
         (код 4) — [message_id, flags, peer_id, timestamp, text, ...];
-        peer_id в обычном диалоге пользователя и есть автор. Прочие типы
-        (например, 61 — «пользователь печатает») боту не нужны.
+        peer_id в обычном диалоге пользователя и есть автор.
+        message_event (код 58) — [58, event_id, user_id, peer_id, ts, ...].
+        Прочие типы (например, 61 — «пользователь печатает») боту не нужны.
         """
-        return [e for e in (self._decode_message_new(raw) for raw in updates) if e]
+        events: list[dict] = []
+        for raw in updates:
+            decoded = self._decode_message_new(raw)
+            if decoded:
+                events.append(decoded)
+                continue
+            decoded = self._decode_message_event(raw)
+            if decoded:
+                events.append(decoded)
+        return events
 
     def _decode_message_new(self, raw: Any) -> dict | None:
         """Один компактный event: MESSAGE_NEW → словарь, остальное — None.
@@ -163,6 +203,12 @@ class VkAutoLikerBot:
         этих ID наше. Поля flags VK для этого не годятся: входящие
         сообщения владельца приходят с разными значениями (наблюдались 1
         и 3), как и эхо.
+
+        Live-форма 12.10: нажатие inline-кнопки приходит СЮДА ЖЕ (код 4),
+        а не кодом 58: text (raw[5]) — метка кнопки («ℹ️ Статус»), а payload
+        лежит в extra-словаре (raw[6]): {'emoji': '1', 'payload':
+        '{"command":"status"}', ...}. Payload кладём в событие — обработчик
+        отдаёт ему приоритет над текстом.
         """
         if not isinstance(raw, list) or len(raw) < 6 or raw[0] != _EVENT_MESSAGE_NEW:
             return None
@@ -174,30 +220,131 @@ class VkAutoLikerBot:
             return None
         if len(raw) >= 9 and raw[8] in self._sent_ids:
             return None
+        extra = raw[6] if len(raw) >= 7 and isinstance(raw[6], dict) else {}
         return {
             "type": "message_new",
-            "message": {"from_id": peer_id, "peer_id": peer_id, "text": raw[5]},
+            "message": {
+                "from_id": peer_id,
+                "peer_id": peer_id,
+                "text": raw[5],
+                "payload": extra.get("payload"),
+            },
         }
 
+    def _decode_message_event(self, raw: Any) -> dict | None:
+        """Один компактный event: message_event (код 58) → словарь, остальное — None.
+
+        Compact-формат VK (предварительный, подтвердится live-проверкой):
+        [58, event_id, user_id, peer_id, ts, action, label, payload, ...]
+        payload — JSON-строка {"command": "start"|"stop"|"status"}.
+        """
+        if not isinstance(raw, list) or len(raw) < 8 or raw[0] != _EVENT_MESSAGE_EVENT:
+            return None
+        return {
+            "type": "message_event",
+            "event_id": raw[1],
+            "user_id": raw[2],
+            "peer_id": raw[3],
+            "ts": raw[4],
+            "payload": raw[7],
+        }
+
+    def _dispatch(self, name: str, peer_id: int) -> None:
+        """Единый диспетчер: имя команды (текст или payload) → Commands.
+
+        /-префикс срезается: /старт, / старт, ///старт → старт. Команды
+        без slash продолжают работать (назад-совместимо). Неизвестное
+        имя — help. Команды идемпотентны: повторный вызов (ределивер
+        события) безопасен.
+        """
+        resolved = _COMMAND_MAP.get(name.strip().lstrip("/").strip().lower())
+        if resolved == "start":
+            self._commands.start(
+                lambda reply: self._send(peer_id, reply, keyboard=self._keyboard())
+            )
+        elif resolved == "stop":
+            self._send(peer_id, self._commands.stop(), keyboard=self._keyboard())
+        elif resolved == "status":
+            self._send(peer_id, self._commands.status(), keyboard=self._keyboard())
+        else:
+            self._send(peer_id, self._commands.help(), keyboard=self._keyboard())
+
     def _handle_event(self, event: dict) -> None:
-        """Обрабатывает событие: только message_new от владельца, фиксированная мапа."""
-        if event.get("type") != "message_new":
-            return
+        """Обрабатывает событие: message_new от владельца или callback-кнопки."""
+        etype = event.get("type")
+        if etype == "message_new":
+            self._handle_message_new(event)
+        elif etype == "message_event":
+            self._handle_message_event(event)
+
+    def _handle_message_new(self, event: dict) -> None:
+        """Сообщение от владельца — текстовые команды и нажатия кнопок.
+
+        Нажатие inline-кнопки (action type=text) приходит как MESSAGE_NEW с
+        payload в extra; text при этом — метка кнопки («ℹ️ Статус»), не
+        команда. Payload имеет приоритет: его команда исполняется вместо
+        текста; невалидный payload — fallthrough на текст.
+        """
         message = event["message"]
         if int(message["from_id"]) != self._config.user_id:
             self._logger.info("VK-бот: сообщение от постороннего, игнорирую")
             return
         peer_id = int(message["peer_id"])
-        text = message.get("text", "").strip().lower()
+        command = self._payload_command(message.get("payload"))
+        if command is not None:
+            self._logger.info(f"VK-бот: кнопка «{command}»")
+            self._dispatch(command, peer_id)
+            return
+        text = (message.get("text") or "").strip().lower()
         self._logger.info(f"VK-бот: команда «{text}»")
-        if text in ("старт", "start"):
-            self._commands.start(lambda reply: self._send(peer_id, reply))
-        elif text in ("статус", "status"):
-            self._send(peer_id, self._commands.status())
-        else:
-            self._send(peer_id, self._commands.help())
+        self._dispatch(text, peer_id)
 
-    def _send(self, peer_id: int, text: str) -> None:
+    def _payload_command(self, payload_str: Any) -> str | None:
+        """Команда из payload кнопки: JSON-строка {"command": ...} → имя команды.
+
+        Возвращает None, если payload отсутствует или не содержит строковой
+        команды — вызывающий уходит на текстовую ветку (не падать на
+        чужих клиентах, шлющих битый payload).
+        """
+        if not isinstance(payload_str, str) or not payload_str:
+            return None
+        try:
+            payload = json.loads(payload_str)
+        except json.JSONDecodeError:
+            self._logger.warning(f"VK-бот: невалидный payload кнопки: {payload_str!r}")
+            return None
+        command = payload.get("command") if isinstance(payload, dict) else None
+        return command if isinstance(command, str) else None
+
+    def _handle_message_event(self, event: dict) -> None:
+        """Callback-кнопка (код 58): ack, проверка владельца, payload-команда.
+
+        Live-наблюдение 12.10 показало: inline-кнопки type=text приходят
+        как MESSAGE_NEW с payload в extra, а не этим событием. Ветку
+        сохраняем на случай кнопок callback-типа. VK требует на каждое
+        событие 58 ответ messages.sendMessageEventAnswer (без него —
+        бесконечные ределиверы), поэтому ack отправляется первым, до
+        проверки владельца и payload: чужое или битое событие тоже
+        отвечает.
+        """
+        peer_id = int(event.get("peer_id", 0))
+        user_id = int(event.get("user_id", 0))
+        self._api(
+            "messages.sendMessageEventAnswer",
+            event_id=event.get("event_id"),
+            user_id=user_id,
+            peer_id=peer_id,
+        )
+        if user_id != self._config.user_id:
+            self._logger.info("VK-бот: кнопка от постороннего, игнорирую")
+            return
+        command = self._payload_command(event.get("payload"))
+        if command is None:
+            return
+        self._logger.info(f"VK-бот: payload кнопка «{command}»")
+        self._dispatch(command, peer_id)
+
+    def _send(self, peer_id: int, text: str, keyboard: str | None = None) -> None:
         """Отправляет ответ через messages.send и запоминает его ID.
 
         Запоминаем random_id (сгенерированный нами) и message_id (из
@@ -206,13 +353,14 @@ class VkAutoLikerBot:
         """
         random_id = random.randint(1, 2_000_000_000)
         self._sent_ids.append(random_id)
-        # messages.send возвращает в response сразу message_id (int)
-        message_id = self._api(
-            "messages.send",
-            peer_id=peer_id,
-            message=text,
-            random_id=random_id,
-        )
+        params: dict[str, Any] = {
+            "peer_id": peer_id,
+            "message": text,
+            "random_id": random_id,
+        }
+        if keyboard is not None:
+            params["keyboard"] = keyboard
+        message_id = self._api("messages.send", **params)
         if isinstance(message_id, int):
             self._sent_ids.append(message_id)
 

@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-230%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-252%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -144,7 +144,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `python src/main.py test` | Диагностика: поиск + лайк на одном посте |
 | `python src/main.py status` | Статистика: сессии/лайки за сегодня и всего |
 | `python src/main.py reset` | Очистка SQLite (обработанные посты, сессии, кэш стен) |
-| `python src/main.py bot` | VK-бот: резидентный long polling — старт/статус/помощь из VK |
+| `python src/main.py bot` | VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK |
 | `pytest` | Запуск тестов |
 | `pytest -m "not browser and not live"` | Только юнит-тесты (без браузера и сети) |
 | `pytest --cov=src --cov-report=term-missing` | Тесты с покрытием |
@@ -392,13 +392,25 @@ launchctl list | grep vkautoliker                                               
 
 | Команда | Действие |
 |---|---|
-| `старт` / `start` | запуск сессии (`run --no-limit`); если уже идёт — «Сессия уже идёт» |
-| `статус` / `status` | статус: идущая сессия (или последняя), за сегодня и всего |
-| `помощь` / `help` | список команд |
+| `/старт` / `старт` / `start` | запуск сессии (`run --no-limit`); если уже идёт — «Сессия уже идёт» |
+| `/стоп` / `стоп` / `stop` | запрос остановки идущей сессии (файловый флаг; сессия завершится на следующем посте) |
+| `/статус` / `статус` / `status` | статус: идущая сессия (или последняя), за сегодня и всего |
+| `/помощь` / `помощь` / `help` | список команд |
+
+Парсер срезает ведущий `/` и пробелы: `/старт`, `/ старт`, `///старт` — одна и та же команда.
+Команды без slash продолжают работать (назад-совместимо).
+
+**Inline-клавиатура.** Каждый ответ бота содержит кнопку-строку
+`[▶️ Старт | ⏹️ Стоп | ℹ️ Статус]` — нажатие отправляет тот же payload, что и текстовая команда.
+Кнопки работают без ввода текста; команды идемпотентны, повторное нажатие безопасно.
 
 `старт` запускает сессию отдельным процессом (flock процессный — резидент
 сам не может вести сессию); по завершении приходит отдельное сообщение
 «Сессия завершена: лайков N…».
+
+**Регистрация команд в сообществе** (для подсказок VK): Настройки → Управление сообществом →
+Меню → Команды → добавить `/старт`, `/стоп`, `/статус`, `/помощь` с описаниями.
+Бот принимает и текст без slash, регистрация нужна только для автоподсказок в клиенте VK.
 
 > **Авто-расписание Mac (launchd, 3 запуска/день) удалено** — сессии запускаются
 > через VK-бота (`старт`) и вручную.

@@ -23,6 +23,7 @@ from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilte
 from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
 from settings import Settings
 from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
+from stop_flag import StopFlag
 from vk_api import CaptchaError, VKApiClient, VkApiSearchService
 
 
@@ -47,6 +48,7 @@ class AutoLiker:
         self._posts_repo = PostsRepository(self._db)
         self._sessions_repo = SessionsRepository(self._db)
         self._walls_repo = ClosedWallsRepository(self._db, config)
+        self._stop_flag = StopFlag()
         structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
         stop_words = None
         if config.filter_mode in ("stop_words", "review"):
@@ -123,6 +125,11 @@ class AutoLiker:
         no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
         сессия записывается с is_auto=True.
         """
+        # Флаг остановки снимается в самом начале run() (до старта браузера):
+        # позже (после start_session) свежий стоп, нажатый сразу после
+        # «Сессия запущена», глотался 60–90 сек — старт браузера и
+        # проверка авторизации
+        self._stop_flag.clear()
         self._browser.start()
         if not self._browser.is_logged_in():
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
@@ -179,6 +186,11 @@ class AutoLiker:
             for index, post in enumerate(all_posts):
                 if likes_count >= limit:
                     self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{limit})")
+                    break
+
+                # Стоп-условие: файловый флаг (кнопка/команда «стоп» из бота)
+                if self._stop_flag.exists():
+                    self._logger.info("Получен сигнал остановки — завершение сессии")
                     break
 
                 # Стоп-условие: серия капч — VK заподозрил автоматизацию

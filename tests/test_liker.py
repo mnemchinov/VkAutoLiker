@@ -54,6 +54,11 @@ def liker(mock_config, mock_logger):
     # is_processed по умолчанию False (пост не обработан)
     obj._posts_repo.is_processed = MagicMock(return_value=False)
 
+    # Флаг остановки по умолчанию снят (иначе реальный src/.autoliker.stop
+    # из рабочего каталога обрывал бы каждый тестовый прогон run())
+    obj._stop_flag = MagicMock()
+    obj._stop_flag.exists = MagicMock(return_value=False)
+
     return obj
 
 
@@ -486,6 +491,55 @@ class TestRun:
             liker.run(no_limit=True)
 
         assert "Досрочное завершение: лайков 1/2" in caplog.text
+
+    def test_run_clears_stop_flag_at_run_start(self, liker, mock_config):
+        """run() снимает флаг остановки в самом начале (до старта браузера).
+
+        Stale-стоп между сессиями не убивает новую, а свежий стоп, нажатый
+        сразу после «Сессия запущена», не глотается (окно 60–90 сек старта
+        браузера и авторизации).
+        """
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
+
+        with patch("liker.time.sleep"):
+            liker.run(no_limit=True)
+
+        liker._stop_flag.clear.assert_called_once()
+
+    def test_run_stops_loop_when_stop_flag_raised(self, liker, mock_config, caplog):
+        """Флаг остановки поднят после 1-го лайка — цикл прерывается, сессия закрывается."""
+        mock_config.likes_per_session_min = 5
+        mock_config.likes_per_session_max = 5
+        posts = [_make_post(1, i) for i in range(5)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
+        liker._posts_repo.mark_processed = MagicMock()
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+        # Первый пост — флаг снят, со второго — поднят (проверка в начале итерации)
+        liker._stop_flag.exists = MagicMock(side_effect=[False, True, True, True, True])
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", return_value=0),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+            caplog.at_level(logging.INFO),
+        ):
+            liker.run(no_limit=True)
+
+        assert liker._likes_service.like.call_count == 1
+        assert "сигнал остановки" in caplog.text.lower()
+        liker._sessions_repo.end_session.assert_called_once()
 
 
 class TestPipelineComposition:

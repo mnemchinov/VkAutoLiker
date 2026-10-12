@@ -18,6 +18,7 @@ from file_lock import FileLock
 from logger import AppLogger
 from repositories import SessionsRepository
 from settings import Settings
+from stop_flag import StopFlag
 
 # Сессионная блокировка: та же, что в main.py. Пробуем её, чтобы не
 # запустить вторую сессию поверх уже идущей
@@ -49,6 +50,22 @@ class Commands:
         self._logger = logger
         self._db = Database(config)
         self._sessions_repo = SessionsRepository(self._db)
+        self._stop_flag = StopFlag()
+
+    def stop(self) -> str:
+        """Просит идущую сессию остановиться: ставит файловый флаг.
+
+        Сессия — отдельный процесс (subprocess.Popen в start()); сигнал
+        послать нечем, PID обратно не передаётся — работает только
+        файловый флаг. Проверка идемпотентна: повторный стоп не ошибка.
+        Если сессии нет, флаг всё равно ставится и будет снят clear()
+        при следующем старте.
+        """
+        running = self._sessions_repo.get_running_session()
+        self._stop_flag.touch()
+        if running is None:
+            return "Идущей сессии нет (флаг остановки снятится при следующем старте)"
+        return "Запрошена остановка сессии"
 
     def status(self) -> str:
         """Возвращает статус: всего, за сегодня и третья строка —
@@ -80,7 +97,10 @@ class Commands:
 
     def help(self) -> str:
         """Возвращает список доступных команд."""
-        return "Команды: старт — запустить сессию; статус — статистика; помощь — список команд"
+        return (
+            "Команды: старт — запустить сессию; стоп — остановить текущую; "
+            "статус — статистика; помощь — список команд"
+        )
 
     def start(self, send: Callable[[str], None]) -> None:
         """Запускает сессию лайкинга в отдельном процессе, результат — через send.
@@ -95,6 +115,10 @@ class Commands:
             send("Сессия уже идёт")
             return
         lock.release()
+
+        # Снимаем устаревший флаг остановки: случайный «стоп» между сессиями
+        # не должен убить следующую (файл вне жизненного цикла процесса сессии)
+        self._stop_flag.clear()
 
         before = self._sessions_repo.get_last_session()
         started_before_id = before.id if before is not None else 0
