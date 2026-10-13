@@ -23,8 +23,7 @@ description: Перед любой правкой в src/ или создани�
 - `time.sleep(1)` при ретрае ошибки 6
 - `time.sleep(5.0)` при сетевом ретрае в `VKApiClient.call()`
 - `random.uniform(1, 3)` после клика
-- `random.uniform(55, 65)` при сетевом ретрае в `is_logged_in()` (был `time.sleep(60)`,
-  исправлено для соблюдения инварианта)
+- `random.uniform(55, 65)` при сетевом ретрае в `is_logged_in()`
 
 ### 2. Rate-limit VK API ≈ 3 запроса/сек
 
@@ -135,7 +134,7 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 Перед `wall.get` — проверка `ClosedWallsRepository.is_wall_closed(owner_id)`.
 Ошибки VK 15/18/30 — `mark_wall_closed`, TTL — `closed_wall_ttl_days` (7).
-Экономит ~36% API-вызовов. `CaptchaError` (код 14) НЕ кэшируется —
+Предотвращает пустые API-вызовы на закрытые стены. `CaptchaError` (код 14) НЕ кэшируется —
 ре-рейзит наверх (капча-стоп), поэтому `except CaptchaError` в
 `stage_collect.py` стоит **перед** `except VKApiError`.
 
@@ -153,7 +152,7 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 `main.py` через `FileLock` (`src/file_lock.py`) берёт эксклюзивную файловую
 блокировку при старте: `fcntl.flock` на POSIX, `msvcrt.locking` на Windows.
-Второй процесс (launchd двойной запуск) находит lock занятым и немедленно завершается.
+Второй процесс (параллельный запуск) находит lock занятым и немедленно завершается.
 
 ### finally в main()
 
@@ -172,13 +171,13 @@ queries → hashtags → groups → accounts → auto_friends → auto_groups
 
 ### Error 6 — ретрай с счётчиком
 
-Цикл с max 3 ретраев (не рекурсия — ранее была бесконечная рекурсия, исправлено).
+Цикл с max 3 ретраев (не рекурсия).
 
 ## Конфигурация и секреты
 
 - **Секреты загружаются из env vars** (`VK_SERVICE_TOKEN`, `VK_LLM_API_KEY`), не из файлов в git.
   Не выводить их в логи, ответы, комментарии, тесты и документацию. В тестах — заглушка `"test_token"`.
-- `chrome_profile/`, `*.db`, `*.log`, `.env`, `.autoliker.lock` в `.gitignore`.
+- `chrome_profile/`, `*.db`, `*.log`, `.env`, `.autoliker.lock`, `.autoliker.bot.lock`, `.autoliker.stop` в `.gitignore`.
 - Любые изменения в `Settings` (особенно лимиты и источники) — только с явного
   согласия пользователя: они напрямую влияют на риск блокировки аккаунта.
 

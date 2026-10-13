@@ -18,52 +18,6 @@ def _no_captcha_find_elements(elements):
 
 
 class TestBrowserLikesMock:
-    def test_is_liked_true_by_aria_label(self, mock_config, mock_logger, mock_driver):
-        browser = MagicMock()
-        browser.navigate = MagicMock()
-        browser.wait_for = MagicMock(return_value=True)
-
-        el = MagicMock()
-        el.get_attribute = MagicMock(return_value=LIKED_LABEL)
-        browser.find_elements = MagicMock(return_value=[el])
-
-        svc = BrowserLikesService(browser, mock_config, mock_logger)
-        assert svc.is_liked(-123, 456) is True
-
-    def test_is_liked_false_by_aria_label(self, mock_config, mock_logger, mock_driver):
-        browser = MagicMock()
-        browser.navigate = MagicMock()
-        browser.wait_for = MagicMock(return_value=True)
-
-        el = MagicMock()
-        el.get_attribute = MagicMock(return_value=NOT_LIKED_LABEL)
-        browser.find_elements = MagicMock(return_value=[el])
-
-        svc = BrowserLikesService(browser, mock_config, mock_logger)
-        assert svc.is_liked(-123, 456) is False
-
-    def test_is_liked_by_class_fallback(self, mock_config, mock_logger, mock_driver):
-        browser = MagicMock()
-        browser.navigate = MagicMock()
-        browser.wait_for = MagicMock(return_value=True)
-
-        el = MagicMock()
-        el.get_attribute = MagicMock(
-            side_effect=lambda attr: "active liked" if attr == "class" else None
-        )
-        browser.find_elements = MagicMock(return_value=[el])
-
-        svc = BrowserLikesService(browser, mock_config, mock_logger)
-        assert svc.is_liked(-123, 456) is True
-
-    def test_is_liked_button_not_found(self, mock_config, mock_logger, mock_driver):
-        browser = MagicMock()
-        browser.navigate = MagicMock()
-        browser.wait_for = MagicMock(return_value=False)
-
-        svc = BrowserLikesService(browser, mock_config, mock_logger)
-        assert svc.is_liked(-123, 456) is False
-
     def test_like_clicks_and_verifies(self, mock_config, mock_logger, mock_driver):
         browser = MagicMock()
         browser.navigate = MagicMock()

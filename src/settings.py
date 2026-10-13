@@ -35,10 +35,12 @@ class Settings(BaseSettings):
     VK API: service_token, api_version, base_url.
     Браузер: profile_path, headless.
     Поиск: queries, hashtags, groups, accounts, auto_friends, auto_groups, лимиты сбора.
-    LLM: llm_model, llm_api_base, llm_api_key, llm_system_prompt, llm_timeout, llm_max_text_length, llm_ssl_verify.
+    LLM: llm_model, llm_api_base, llm_api_key, llm_system_prompt, llm_stop_topics,
+    llm_timeout, llm_max_text_length, llm_max_tokens, llm_ssl_verify.
     Лимиты/задержки: likes_per_session_min/max, sessions_per_day, delays, max_captcha_streak.
     Логирование: log_level, log_file.
     SQLite: db_path.
+    VK-бот: bot_token.
     """
 
     model_config = SettingsConfigDict(
@@ -120,6 +122,9 @@ class Settings(BaseSettings):
 
     # Профиль Chrome
     profile_max_size_mb: int = 500
+
+    # VK-бот (long polling): запуск сессий и статус из сообщений VK
+    bot_token: SecretStr = SecretStr("")
 
     @field_validator(
         "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"

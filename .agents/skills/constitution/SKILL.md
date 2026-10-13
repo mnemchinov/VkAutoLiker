@@ -57,7 +57,7 @@ If the input mixes constitution content with feature work — extract feature wo
 All automated actions MUST imitate human behavior.
 
 - All delays MUST use `random.uniform(min, max)`. Fixed `time.sleep(...)` forbidden,
-  except two documented exceptions (retry code 6, post-click pause).
+  except the few documented fixed delays (see AGENTS invariant 1).
 - Daily and per-session limits MUST be enforced at two levels.
 - Captcha MUST abort the session (`max_captcha_streak`), never bypassed.
 
@@ -76,7 +76,7 @@ All VK API calls MUST go through `VKApiClient.call()`.
 
 Every post MUST be deduplicated by `(owner_id, item_id)`.
 
-- Successful, failed, errored attempts MUST be marked processed.
+- A post is marked processed only on success (LIKED/ALREADY_LIKED); failed attempts (CAPTCHA/FAILED/Exception) are NOT marked — they are retried in the next session.
 - `owner_id` for groups MUST be negative.
 
 **Rationale**: Prevents repeated processing.

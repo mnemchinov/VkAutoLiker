@@ -1,9 +1,9 @@
 """Кроссплатформенная эксклюзивная блокировка файла.
 
-POSIX: fcntl.flock, Windows: msvcrt.locking. Нужна для защиты от двойного
-запуска: launchd иногда стартует два процесса в один слот, и второй убил бы
-Chrome первого через _kill_stale_chrome(), после чего первый работал бы с
-мёртвой сессией (invalid session id).
+POSIX: fcntl.flock, Windows: msvcrt.locking. Нужна для защиты от параллельных
+запусков (вручную + ботом): второй процесс убил бы Chrome первого через
+_kill_stale_chrome(), после чего первый работал бы с мёртвой сессией
+(invalid session id).
 """
 
 import sys

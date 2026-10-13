@@ -9,7 +9,7 @@ POST_URL_TEMPLATE = "https://vk.ru/wall{owner_id}_{item_id}"
 class PostStatus(IntEnum):
     """Статус обработки поста в БД.
 
-    UNKNOWN — миграция существующих записей (до добавления status).
+    UNKNOWN — легаси-запись (схема без поля status).
     LIKED — успешный лайк (или уже был лайкнут).
     FILTERED — отсеян стоп-словами или LLM.
     """

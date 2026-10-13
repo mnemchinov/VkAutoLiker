@@ -23,6 +23,7 @@ from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilte
 from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
 from settings import Settings
 from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
+from stop_flag import StopFlag
 from vk_api import CaptchaError, VKApiClient, VkApiSearchService
 
 
@@ -47,6 +48,7 @@ class AutoLiker:
         self._posts_repo = PostsRepository(self._db)
         self._sessions_repo = SessionsRepository(self._db)
         self._walls_repo = ClosedWallsRepository(self._db, config)
+        self._stop_flag = StopFlag()
         structural = FilterChain([DateFilter(config.days_back), EmptyTextFilter()])
         stop_words = None
         if config.filter_mode in ("stop_words", "review"):
@@ -120,15 +122,25 @@ class AutoLiker:
 
         no_limit=True — ручной запуск (--no-limit): дневной лимит не проверяется,
         сессия записывается с is_auto=False и не расходует дневной лимит.
-        no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
+        no_limit=False — авто-запуск: дневной лимит проверяется и
         сессия записывается с is_auto=True.
         """
+        # Флаг остановки снимается в самом начале run() (до старта браузера):
+        # позже (после start_session) свежий стоп, нажатый сразу после
+        # «Сессия запущена», глотался 60–90 сек — старт браузера и
+        # проверка авторизации
+        self._stop_flag.clear()
+        # Зомби-сессии (ended_at NULL, процесс мёртв) закрываем до start_session:
+        # иначе «статус» и отчёт бота видели бы призрака «идущей» сессии
+        closed = self._sessions_repo.close_zombie_sessions()
+        if closed:
+            self._logger.info(f"Зомби-сессий закрыто: {closed}")
         self._browser.start()
         if not self._browser.is_logged_in():
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
             return
 
-        # Jitter для авто-запуска: размывает фиксированные слоты launchd (10:00, 14:00, 19:00)
+        # Jitter для авто-запуска: размывает фиксированные времена запуска
         if not no_limit:
             jitter = random.uniform(0, 1800)
             self._logger.info(f"Случайная задержка перед стартом: {jitter:.0f} сек")
@@ -181,6 +193,11 @@ class AutoLiker:
                     self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{limit})")
                     break
 
+                # Стоп-условие: файловый флаг (кнопка/команда «стоп» из бота)
+                if self._stop_flag.exists():
+                    self._logger.info("Получен сигнал остановки — завершение сессии")
+                    break
+
                 # Стоп-условие: серия капч — VK заподозрил автоматизацию
                 if captcha_streak >= self._config.max_captcha_streak:
                     self._logger.warning(
@@ -198,6 +215,8 @@ class AutoLiker:
 
                     if result == LikeResult.LIKED:
                         likes_count += 1
+                        # Промежуточный статус: текущее число лайков видно в status()
+                        self._sessions_repo.update_session_likes(session_id, likes_count)
                         likes_since_break += 1
                         captcha_streak = 0
                         self._posts_repo.mark_processed(
@@ -270,23 +289,8 @@ class AutoLiker:
                 f"Всего: сессий {total_sessions}, лайков {total_likes} ==="
             )
 
-    def status(self) -> None:
-        """Выводит статистику сессий и лайков (за сегодня и всего).
-
-        Авто-сессии (launchd) и ручные (--no-limit) показываются раздельно.
-        """
-        total_sessions, total_likes = self._sessions_repo.get_total_stats()
-        auto_today, auto_likes_today = self._sessions_repo.get_daily_stats()
-        manual_sessions, manual_likes = self._sessions_repo.get_manual_stats()
-        self._logger.info(
-            f"Статус: авто сегодня={auto_today}/{self._config.sessions_per_day} "
-            f"сессий/{auto_likes_today} лайков, "
-            f"ручных={manual_sessions} сессий/{manual_likes} лайков, "
-            f"всего={total_sessions} сессий/{total_likes} лайков"
-        )
-
     def reset(self) -> None:
-        """Очищает SQLite-базу (обработанные посты и сессии)."""
+        """Очищает SQLite-базу (обработанные посты, сессии, кэш стен)."""
         self._posts_repo.reset()
         self._sessions_repo.reset()
         self._walls_repo.reset()

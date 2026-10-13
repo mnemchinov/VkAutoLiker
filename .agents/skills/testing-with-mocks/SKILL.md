@@ -18,15 +18,19 @@ description: Перед написанием или правкой тестов.
 
 | Класс | Файл | Что тестирует |
 |---|---|---|
-| `TestSettings` | `test_settings.py` | Env vars, дефолты, валидация, SecretStr |
+| `TestSettings`, `TestEnvVars`, `TestValidation`, `TestGetSettings` | `test_settings.py` | Env vars, дефолты, валидация, SecretStr, get_settings |
 | `TestVKApiClient` | `test_vk_api_client.py` | Rate-limit, ретраи, error 6/14, сетевые ошибки |
 | `TestVkApiSearchService` | `test_vk_api_search_service.py` | newsfeed.search, wall.get, friends.get, groups.get, resolveScreenName |
 | `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain` | `test_post_filter.py` | days_back, пустой текст, стоп-слова, композит |
 | `TestLLMTopicFilter`, `TestLLMFilterStage` | `test_stage_llm_filter.py` | LLM-фильтрация: мок litellm, fallback, stage |
-| `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_closed_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии, closed-walls кэш) |
+| `TestCollectStage`, `TestDedupStage`, `TestPipeline` | `test_stage_collect.py`, `test_stage_dedup.py`, `test_pipeline.py` | сбор (приоритет, early-exit, режимы), дедупликация, конвейер |
+| `TestRun`, `TestPipelineComposition`, `TestClose` | `test_liker.py` | цикл лайков (лимит, паузы, стоп, зомби), состав pipeline, close |
+| `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_closed_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии + зомби, closed-walls кэш) |
+| `TestCommands`, `TestVkAutoLikerBot`, `TestStopFlag`, `TestFileLock`, `TestMain` | `test_commands.py`, `test_vk_autoliker_bot.py`, `test_stop_flag.py`, `test_file_lock.py`, `test_main.py` | команды, бот (декодер, клавиатура, ack), стоп-флаг, lock, CLI-ветки |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
-| `TestVKBrowserIsLoggedIn` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай |
-| `TestRun`, `TestPipelineComposition` | `test_liker.py` | цикл лайков (эффективный лимит, паузы, досрочное завершение), состав pipeline по `filter_mode` |
+| `TestBrowserLikesFixture` | `test_browser_fixture.py` | DOM-селекторы на реальном Chrome + фиксут-страница (marker browser) |
+| `TestVKBrowserIsLoggedIn`, `TestVKBrowserClose`, `TestVKBrowserCleanup` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай, close, cleanup |
+| `TestE2E` | `test_e2e.py` | e2e на реальном посте (marker live, skip по умолчанию) |
 
 ## Моки вместо сети и браузера
 
@@ -144,15 +148,16 @@ DOM-селекторов — обновлять фиксут** и прогоня
 pytest -m "not browser and not live" --cov=src --cov-report=term-missing
 ```
 
-Цель: ≥70%. Текущий эталон — 81% (189 тестов).
+Цель: ≥70%. Текущий эталон — 85% (255 тестов).
 
 ## Паттерны тестирования AutoLiker и stages
 
 `AutoLiker` — оркестратор: сбор постов — в `CollectStage` (`stages/`),
 цикл лайков — в `run()`.
 
-- **`CollectStage`** — мокаю методы `VKApiSearchService` (`search_posts`,
-  `get_wall_posts`, `get_friends`, `get_groups`) и `PostsRepository`
+- **`CollectStage`** — мокаю методы `VKApiSearchService` (`search`,
+  `search_hashtag`, `get_wall_posts`, `get_friends`, `get_groups`,
+  `resolve_screen_name`) и `PostsRepository`
   (`is_processed` → `False`). Проверяю: приоритет источников, early-exit на
   `enough`, `is_processed` раньше стоп-слов, shuffle, маркировку по режиму
   (`stop_words`: hard → FILTERED; `review`: метка SOFT/HARD + пост в пуле).
