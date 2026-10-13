@@ -128,7 +128,7 @@ python src/main.py bot      # VK-бот: резидентный long polling —
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (255 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (256 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -142,7 +142,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 255 тестов, маркер не нужен.
+- Юнит-тесты на моках — 256 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -266,7 +266,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     в пул, — добавлять его `screen_name` в `VK_GROUPS` вручную.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
     использующие `chrome_profile/` (на POSIX — `pgrep` + `SIGTERM`, на Windows — PowerShell
-    CIM + `SIGTERM`), удаляет lock-файлы (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
+    CIM + `SIGTERM`, который там — `TerminateProcess`, жёсткий килл), удаляет lock-файлы (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)
     и проверяет размер профиля: при превышении `profile_max_size_mb` (дефолт 500) чистит
     кэш-подкаталоги (`Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`).
     Размер считается рекурсивным обходом (`rglob`) — утилиты `du` на Windows нет.

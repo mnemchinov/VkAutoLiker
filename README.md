@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-255%20passed-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-256%20passed-brightgreen?logo=pytest)
 ![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
@@ -425,13 +425,18 @@ launchctl list | grep vkautoliker                                               
 сбоев», через 1 минуту):
 
 ```powershell
-schtasks /create /tn "VkAutoLiker_Bot" /tr "C:\VkAutoLiker\.venv\Scripts\python.exe C:\VkAutoLiker\src\main.py bot" /sc onlogon /f
+schtasks /create /tn "VkAutoLiker_Bot" /tr "cmd /c cd /d C:\VkAutoLiker && .venv\Scripts\python.exe src\main.py bot" /sc onlogon /f
 ```
 
 ```powershell
 schtasks /query /tn "VkAutoLiker_Bot"      # статус
 schtasks /delete /tn "VkAutoLiker_Bot" /f  # удалить задачу
 ```
+
+Рабочий каталог обязателен: относительные пути (`.env`, `./chrome_profile`,
+`vk_autoliker.db`) резолвятся от каталога запуска задачи — по умолчанию
+`%SYSTEMROOT%`. Для задачи, созданной через GUI, укажите «Start in»
+(Каталог для начала): `C:\VkAutoLiker`.
 
 **Примечание:** защита от двойного запуска работает и на Windows — через
 `msvcrt.locking`. Task Scheduler не запускает процесс дважды, но блокировка
