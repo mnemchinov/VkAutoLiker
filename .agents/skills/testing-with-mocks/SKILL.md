@@ -26,7 +26,7 @@ description: Перед написанием или правкой тестов.
 | `TestCollectStage`, `TestDedupStage`, `TestPipeline` | `test_stage_collect.py`, `test_stage_dedup.py`, `test_pipeline.py` | сбор (приоритет, early-exit, режимы), дедупликация, конвейер |
 | `TestRun`, `TestPipelineComposition`, `TestClose` | `test_liker.py` | цикл лайков (лимит, паузы, стоп, зомби), состав pipeline, close |
 | `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_closed_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии + зомби, closed-walls кэш) |
-| `TestCommands`, `TestVkAutoLikerBot`, `TestStopFlag`, `TestFileLock`, `TestMain` | `test_commands.py`, `test_vk_autoliker_bot.py`, `test_stop_flag.py`, `test_file_lock.py`, `test_main.py` | команды, бот (декодер, клавиатура, ack), стоп-флаг, lock, CLI-ветки |
+| `TestCommands`, `TestVkBot`, `TestStopFlag`, `TestFileLock`, `TestMain` | `test_commands.py`, `test_vk_bot.py`, `test_stop_flag.py`, `test_file_lock.py`, `test_main.py` | команды, бот (клавиатура, ack), стоп-флаг, lock, CLI-ветки |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
 | `TestBrowserLikesFixture` | `test_browser_fixture.py` | DOM-селекторы на реальном Chrome + фиксут-страница (marker browser) |
 | `TestVKBrowserIsLoggedIn`, `TestVKBrowserClose`, `TestVKBrowserCleanup` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай, close, cleanup |
@@ -55,8 +55,8 @@ liker._posts_repo = MagicMock()
 ### patch для HTTP и sleep
 
 ```python
-@patch("vk_api.vk_api_client.requests.get")
-@patch("vk_api.vk_api_client.time.sleep")
+@patch("api_client.vk_api_client.requests.get")
+@patch("api_client.vk_api_client.time.sleep")
 def test_something(mock_sleep, mock_get):
     mock_get.return_value.json.return_value = {"response": {...}}
     # mock_sleep — тесты не спят
@@ -137,7 +137,7 @@ DOM-селекторов — обновлять фиксут** и прогоня
 
 ### Импорты
 
-Тесты используют плоские импорты (`from vk_api import ...`), как и `src/`.
+Тесты используют плоские импорты (`from api_client import ...`), как и `src/`.
 Путь в `sys.path` добавляет `tests/conftest.py`.
 
 ## Покрытие
@@ -148,7 +148,7 @@ DOM-селекторов — обновлять фиксут** и прогоня
 pytest -m "not browser and not live" --cov=src --cov-report=term-missing
 ```
 
-Цель: ≥70%. Текущий эталон — 85% (256 тестов).
+Цель: ≥70%. Текущий эталон — 86% (260 тестов).
 
 ## Паттерны тестирования AutoLiker и stages
 

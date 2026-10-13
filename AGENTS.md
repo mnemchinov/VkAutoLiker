@@ -47,12 +47,13 @@ pytest.ini             — регистрация маркеров browser / liv
 requirements.txt       — зависимости
 README.md              — документация проекта
 .gitignore             — исключения (chrome_profile, *.db, *.log, .venv и т.д.)
-src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, vk_api/, repositories/, migrations/)
+src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, api_client/, vk_bot/, repositories/, migrations/)
   main.py              — CLI-точка входа (login|run|test|status|reset|bot)
   file_lock.py         — FileLock: кроссплатформенная файловая блокировка (fcntl/msvcrt)
   commands.py          — Commands: команды проекта (status, help, start, stop) — не знают про транспорт
   stop_flag.py         — StopFlag: файловый флаг остановки сессии между процессами
-  vk_autoliker_bot.py  — VkAutoLikerBot: VK-бот (long polling), старт/стоп/статус/помощь из VK
+  vk_bot/            — VK-бот: vk_bot.py (VkBot — long-polling-демон на библиотеке
+                       vk_api, мапа команд, клавиатура)
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
@@ -61,7 +62,7 @@ src/                   — весь код: плоские модули + пак
   browser/             — VKBrowser (Selenium + антидетект), BrowserLikesService (клик + верификация)
   post_filter/         — protocol, DateFilter, EmptyTextFilter, StopWordsFilter (matched/StopMatch), LLMTopicFilter, FilterChain
   stages/              — Pipeline + PipelineContext; CollectStage (6 источников, ранний выход), DedupStage, LLMFilterStage (review/llm)
-  vk_api/              — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
+  api_client/          — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
 stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (241 жёстких + 36 мягких)
@@ -128,11 +129,11 @@ python src/main.py bot      # VK-бот: резидентный long polling —
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (256 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (260 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -142,7 +143,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 256 тестов, маркер не нужен.
+- Юнит-тесты на моках — 260 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -150,7 +151,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings, commands, vk_autoliker_bot; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings, commands, vk_bot; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
 ```
 
 ---
@@ -198,7 +199,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных пауз
    в коде быть не должно — это осознанная имитация человека. Исключения: `time.sleep(1)`
-   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `vk_api/vk_api_client.py`,
+   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `api_client/vk_api_client.py`,
    `random.uniform(1, 3)` после клика, `random.uniform(55, 65)` в `is_logged_in()`.
 2. **Rate-limit VK API ≈ 3 запроса/сек** (`_min_interval = 0.34`). Любой новый вызов API
    обязан идти через `VKApiClient.call()` — иначе лимиты и обработка ошибок 6/14 теряются.
@@ -357,7 +358,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     Парсится в `_parse_wall_item()` и `_parse_newsfeed_item()`.
     `CollectStage._accept()` исключает посты где `from_id == config.user_id` —
     лайкать собственные посты на стенах групп и друзей не нужно.
-23. **VK-бот.** `VkAutoLikerBot` — резидентный long-polling-демон (`python src/main.py bot`,
+23. **VK-бот.** `VkBot` — резидентный long-polling-демон (`python src/main.py bot`,
     запуск вручную; автозапуск — launchd/Task Scheduler, опционально, см. README). Демон
     **не берёт сессионную
     блокировку** `.autoliker.lock` (завис в ней — заблокировал бы все сессии); у него своя
@@ -373,26 +374,30 @@ pytest -m "not browser and not live"    # базовая страховка по
     демона; итог — отдельное сообщение по завершении (данные из `sessions`, не из stdout).
     Тред отчёта открывает собственное SQLite-подключение: коннект не переносится
     между тредами (`sqlite3` по умолчанию `check_same_thread=True`).
-    Бот ходит в Bot API своим токеном (`bot_token`, env `VK_BOT_TOKEN`) напрямую
-    `requests` — не через `VKApiClient` (другой токен, long polling — цикл, а не
-    rate-limit-вызовы). Старт демона ретраится: ошибка VK на `getLongPollServer`/long
-    polling — рандомная задержка и повтор (резидент не должен умирать на старте).
+    Бот ходит в Bot API своим токеном (`bot_token`, env `VK_BOT_TOKEN`) через
+    библиотеку `vk_api` (`VkApi`, `VkLongPoll`) — не через `VKApiClient` (другой
+    токен, long polling — цикл, а не rate-limit-вызовы). Протокол —
+    `messages.getLongPollServer` (mode 234, version 3). Либа не обрабатывает
+    `a_config` (ротация канала): `check()` падает `KeyError` на `response['updates']` —
+    ловим и переподключаемся; ошибка одного события (сеть/`VkApiError` при отправке)
+    логируется и не роняет цикл; недействительный токен (error 5) — чистый выход.
+    Сетевые ошибки и ошибки захвата канала — рандомная задержка и повтор
+    (резидент не должен умирать на старте).
     **Inline-клавиатура и payload кнопок.** Каждый ответ `_send()` несёт
     `keyboard=_KEYBOARD_JSON` (inline, одна строка: Старт/Стоп/Статус, цвета
     positive/negative/primary). `payload` кнопки — **JSON-строка** `{"command": "..."}`
-    (VK отдаёт его как строку, требует двойного декода). **Live-форма 12.10:** нажатие
-    inline-кнопки type=text приходит событием **MESSAGE_NEW (compact-код 4)**, а не 58:
-    `text` (raw[5]) — метка кнопки («ℹ️ Статус»), payload лежит в extra-словаре
-    (raw[6] = `{'emoji': ..., 'payload': '{"command":"status"}', ...}`). Декодер кладёт
-    payload в событие; `_handle_message_new` отдаёт ему **приоритет над текстом** (метка
-    кнопки — не команда). Битый payload или payload без `command` — fallthrough на текст,
-    без падения. Ветку `message_event` (compact-код 58) сохраняем на случай кнопок
-    callback-типа: для них VK шлёт 58 и **требует ответ** `messages.sendMessageEventAnswer`
-    (без него — бесконечные ределиверы). Бот отправляет ack **до** обработки события
-    (`event_id` + `user_id` + `peer_id` — обязательные параметры), затем проверяет
-    владельца (`user_id` события == `user_id` из config) — чужое нажатие не
-    исполняется. Для type-text-кнопок в текстовом диалоге ack НЕ требуется — событий
-    58 в live-логе не было. **Команды идемпотентны** (`start` — flock, `stop` —
+    (VK отдаёт его как строку, требует двойного декода). Нажатие inline-кнопки
+    type=text приходит событием **MESSAGE_NEW (код 4)**: `text` — метка кнопки
+    («ℹ️ Статус»), payload — в extra-словаре (либный `Event` кладёт его в
+    `event.extra_values`). `_handle_message_new` отдаёт payload **приоритет над
+    текстом** (метка кнопки — не команда). Битый payload или payload без `command` —
+    fallthrough на текст, без падения. Ветка `message_event` (код 58) — на случай
+    callback-кнопок: для них VK шлёт 58 и **требует ответ**
+    `messages.sendMessageEventAnswer` (без него — бесконечные ределиверы). Либа
+    не мапит 58 — поля читаются из `event.raw` (raw[1] — event_id, raw[2] — user_id,
+    raw[3] — peer_id, raw[7] — payload). Ack отправляется **до** обработки, затем
+    проверяется владелец (`user_id` == `user_id` из config) — чужое нажатие не
+    исполняется. **Команды идемпотентны** (`start` — flock, `stop` —
     touch флага, `status` — чтение), поэтому ределиверы безопасны.
     **/-префикс.** `_dispatch()` срезает ведущие `/` и пробелы (`name.strip().lstrip("/").strip().lower()`):
     `/старт`, `/ старт`, `///старт` → `старт`; команды без slash продолжают работать.
@@ -424,9 +429,9 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 - Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestVkApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
-  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`, `TestCommands`, `TestVkAutoLikerBot`, `TestStopFlag`.
+  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`, `TestCommands`, `TestVkBot`, `TestStopFlag`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
-  `patch("vk_api.vk_api_client.requests.get")` и `patch("vk_api.vk_api_client.time.sleep")` — тесты
+  `patch("api_client.vk_api_client.requests.get")` и `patch("api_client.vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.
 - **Фикстуры в `tests/conftest.py`** — переиспользовать их, не дублировать:
   `mock_config_data` / `mock_config` (готовый `Settings` с дефолтами),

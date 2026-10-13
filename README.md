@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-256%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-260%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -378,7 +378,7 @@ VK-сессию (профиль Chrome), иначе сессии не запус
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
     <key>StandardOutPath</key><string>/dev/null</string>
-    <key>StandardErrorPath</key><string>/путь/к/VkAutoLiker/vk_autoliker_bot.stderr.log</string>
+    <key>StandardErrorPath</key><string>/путь/к/VkAutoLiker/vk_bot.stderr.log</string>
 </dict>
 </plist>
 ```

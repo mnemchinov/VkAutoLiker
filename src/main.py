@@ -12,7 +12,7 @@ from file_lock import FileLock
 from liker import AutoLiker
 from logger import AppLogger
 from settings import get_settings
-from vk_autoliker_bot import VkAutoLikerBot
+from vk_bot import VkBot
 
 # Файл-блокировка: предотвращает двойной запуск (два процесса одновременно)
 _LOCK_FILE = Path(__file__).parent / ".autoliker.lock"
@@ -68,7 +68,10 @@ def main() -> None:
             if not config.bot_token.get_secret_value():
                 print("VK_BOT_TOKEN не задан в .env", file=sys.stderr)
                 sys.exit(1)
-            VkAutoLikerBot(config, logger).run()
+            if not config.user_id:
+                print("VK_USER_ID не задан в .env", file=sys.stderr)
+                sys.exit(1)
+            VkBot(config, logger).run()
             return
 
         lock = _acquire_lock()
