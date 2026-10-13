@@ -122,7 +122,7 @@ class AutoLiker:
 
         no_limit=True — ручной запуск (--no-limit): дневной лимит не проверяется,
         сессия записывается с is_auto=False и не расходует дневной лимит.
-        no_limit=False — авто-запуск (launchd): дневной лимит проверяется и
+        no_limit=False — авто-запуск: дневной лимит проверяется и
         сессия записывается с is_auto=True.
         """
         # Флаг остановки снимается в самом начале run() (до старта браузера):
@@ -140,7 +140,7 @@ class AutoLiker:
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
             return
 
-        # Jitter для авто-запуска: размывает фиксированные слоты launchd (10:00, 14:00, 19:00)
+        # Jitter для авто-запуска: размывает фиксированные времена запуска
         if not no_limit:
             jitter = random.uniform(0, 1800)
             self._logger.info(f"Случайная задержка перед стартом: {jitter:.0f} сек")
@@ -290,7 +290,7 @@ class AutoLiker:
             )
 
     def reset(self) -> None:
-        """Очищает SQLite-базу (обработанные посты и сессии)."""
+        """Очищает SQLite-базу (обработанные посты, сессии, кэш стен)."""
         self._posts_repo.reset()
         self._sessions_repo.reset()
         self._walls_repo.reset()

@@ -13,7 +13,7 @@ LLMFilterStage размещается ПОСЛЕ DedupStage, чтобы:
            в промпт передаются слова-триггеры (post.review_words);
   llm — LLM проверяет ВСЕ посты по темам (llm_stop_topics).
 
-Ban-risk: нулевой — запросы идут к провайдеру LLM, не к VK.
+Риск бана: нулевой — запросы идут к провайдеру LLM, не к VK.
 """
 
 from logger import AppLogger

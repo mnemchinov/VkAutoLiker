@@ -2,8 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-259%20passed-brightgreen?logo=pytest)
-![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-255%20passed-brightgreen?logo=pytest)
+![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
@@ -56,8 +56,8 @@ VK API (сбор постов)
   → Сбор и фильтрация:
       ├ отсеиваем: старые, пустые, свои посты
       ├ пропускаем уже обработанные (SQLite) — до проверки стоп-слов
-      ├ стоп-слова: жёсткие (с '!') — отсев и пометка FILTERED;
-      │   мягкие (без '!') — в режиме review пометка поста для LLM-арбитража
+      ├ стоп-слова: в режиме stop_words жёсткие (с '!') — отсев и пометка FILTERED,
+      │   мягкие проходят; в режиме review любое совпадение — пометка для LLM-арбитража
       ├ 6 источников по приоритету (запросы → хештеги → группы → аккаунты → друзья → подписки)
       ├ случайный порядок внутри каждого источника
       ├ ранний выход: набрали достаточно — остальные источники пропускаем
@@ -101,7 +101,8 @@ VK_AUTO_GROUPS=true                     # собирать посты со ст�
 VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: review или llm
 ```
 
-Полный список всех 46 параметров со значениями по умолчанию — в `.env.example`
+Полный список всех 47 параметров со значениями по умолчанию — в `.env.example`
+(`VK_LLM_STOP_TOPICS` закомментирован: темы содержат запятые, есть встроенные темы)
 (документация, в репозитории): можно скопировать в `.env` и менять только нужное.
 
 ### Первичный вход в VK
@@ -142,7 +143,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `python src/main.py run` | Основная сессия лайкинга (с дневным лимитом) |
 | `python src/main.py run --no-limit` | Ручной запуск без дневного лимита |
 | `python src/main.py test` | Диагностика: поиск + лайк на одном посте |
-| `python src/main.py status` | Статистика: сессии/лайки за сегодня и всего |
+| `python src/main.py status` | Идущая/последняя сессия, сессии/лайки за сегодня и всего |
 | `python src/main.py reset` | Очистка SQLite (обработанные посты, сессии, кэш стен) |
 | `python src/main.py bot` | VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK |
 | `pytest` | Запуск тестов |
@@ -200,8 +201,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 
 | Параметр | Env var | По умолч. | Описание |
 |---|---|---|---|
-| `likes_per_session_min` | `VK_LIKES_PER_SESSION_MIN` | `20` | Минимум лайков за сессию (`random.randint(min, max)`) |
-| `likes_per_session_max` | `VK_LIKES_PER_SESSION_MAX` | `30` | Максимум лайков за сессию |
+| `likes_per_session_min` | `VK_LIKES_PER_SESSION_MIN` | `40` | Минимум лайков за сессию (`random.randint(min, max)`) |
+| `likes_per_session_max` | `VK_LIKES_PER_SESSION_MAX` | `50` | Максимум лайков за сессию |
 | `sessions_per_day` | `VK_SESSIONS_PER_DAY` | `3` | Лимит сессий в день (только `is_auto=1`) |
 | `min_delay_sec` | `VK_MIN_DELAY_SEC` | `15` | Мин. пауза между лайками |
 | `max_delay_sec` | `VK_MAX_DELAY_SEC` | `60` | Макс. пауза между лайками |
@@ -229,7 +230,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `llm_system_prompt` | `VK_LLM_SYSTEM_PROMPT` | (встроенный промпт) | — | Системный промпт (полностью заменяет встроенный универсальный промпт) |
 | `llm_stop_topics` | `VK_LLM_STOP_TOPICS` | (8 тем по умолчанию) | `политика,религия` | Темы, которые LLM проверяет в режиме `llm` (comma-separated) |
 | `llm_timeout` | `VK_LLM_TIMEOUT` | `60` | `10` | Таймаут запроса к LLM (сек; reasoning-модели отвечают за 15–20 сек, запас 60 сек) |
-| `llm_max_tokens` | `VK_LLM_MAX_TOKENS` | `1000` | `5` | Лимит токенов в ответе LLM (reasoning-моделям нужен запас на размышление + ответ) |
+| `llm_max_tokens` | `VK_LLM_MAX_TOKENS` | `1000` | `1000` | Лимит токенов в ответе LLM (reasoning-моделям нужен запас на размышление + ответ) |
 | `llm_max_text_length` | `VK_LLM_MAX_TEXT_LENGTH` | `1000` | `1000` | Обрезка текста поста перед отправкой в LLM |
 | `llm_ssl_verify` | `VK_LLM_SSL_VERIFY` | `true` | `false` | Проверка SSL-сертификата LLM-endpoint (`false` — для корпоративных CA) |
 
@@ -288,10 +289,10 @@ VK_LLM_SSL_VERIFY=false
 подмножество, а не одни и те же первые N.
 
 **Список подписок у `auto_groups` может быть неполным и плавает по дням**
-(service-токен): 11.10 не возвращало 8 сообществ со скрытым составом участников,
-12.10 — возвращало все 90. Не полагаться на `auto_groups` для конкретных
-сообществ: те, что обязаны попадать в пул, указывать в `VK_GROUPS` (источник 3) —
-этот источник работает независимо от полноты `groups.get`.
+(service-токен): сообщества со скрытым составом участников могут отсутствовать
+в разные дни. Не полагаться на `auto_groups` для конкретных сообществ: те, что
+обязаны попадать в пул, указывать в `VK_GROUPS` (источник 3) — этот источник
+работает независимо от полноты `groups.get`.
 
 **Закрытые стены:** недоступные, удалённые и приватные стены запоминаются в SQLite
 и не запрашиваются повторно в течение `closed_wall_ttl_days` (7 дней по умолчанию).
@@ -412,8 +413,7 @@ launchctl list | grep vkautoliker                                               
 Меню → Команды → добавить `/старт`, `/стоп`, `/статус`, `/помощь` с описаниями.
 Бот принимает и текст без slash, регистрация нужна только для автоподсказок в клиенте VK.
 
-> **Авто-расписание Mac (launchd, 3 запуска/день) удалено** — сессии запускаются
-> через VK-бота (`старт`) и вручную.
+> Сессии запускаются через VK-бота (`старт`) и вручную.
 >
 > `run` (без `--no-limit`) считается автозапуском (`is_auto=1`) и расходует дневной лимит.
 > `run --no-limit` — ручной запуск, лимит не тратится.

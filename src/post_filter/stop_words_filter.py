@@ -164,7 +164,7 @@ class StopWordsFilter(PostFilterProtocol):
         self._matched += 1
         if hard:
             self._skipped += 1
-        role = "hard" if hard else "soft"
+        role = "жёсткое" if hard else "мягкое"
         self._logger.info(f"Стоп-слова: пост {post_id} → совпадение {words} ({role})")
         return StopMatch(words=words, hard=hard)
 

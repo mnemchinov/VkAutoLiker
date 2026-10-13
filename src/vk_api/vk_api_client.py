@@ -98,7 +98,7 @@ class VKApiClient:
             if "error" in data:
                 error = data["error"]
                 code = error.get("error_code", 0)
-                msg = error.get("error_msg", "Unknown error")
+                msg = error.get("error_msg", "Неизвестная ошибка")
 
                 if code == 6:
                     error6_retries += 1

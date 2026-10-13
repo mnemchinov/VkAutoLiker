@@ -29,14 +29,15 @@
 
 - **Язык:** Python 3.14 (venv: `.venv/`)
 - **Зависимости** (`requirements.txt`): `selenium>=4.15.0`, `requests>=2.31.0`,
-  `PyYAML>=6.0`, `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`,
-  `litellm`, `ruff>=0.6.0`, `pydantic-settings>=2.2.0`, `python-dotenv>=1.0.0`
+  `pytest>=8.0.0`, `undetected-chromedriver`, `setuptools`, `pytest-cov`,
+  `litellm`, `ruff>=0.6.0`, `pydantic-settings>=2.2.0`, `python-dotenv>=1.0.0`,
+  `pymorphy3>=2.0.0`
 - **Хранилище состояния:** SQLite (стандартная библиотека `sqlite3`), файл `vk_autoliker.db`
 - **Конфигурация:** плоский `Settings(BaseSettings)` (pydantic-settings): env vars + `.env` + дефолты класса; без YAML
 - **Логирование:** стандартный `logging`, консоль + файл `vk_autoliker.log`
 - **Браузер:** Chrome через `undetected-chromedriver` (UC патчит антидетект:
   UA, navigator.webdriver, plugins, window.chrome, WebGL; `version_main` — авто-детект)
-- **README.md:** документация проекта; CI/линтеры/setup.py отсутствуют, сборка как пакета не предусмотрена
+- **README.md:** документация проекта; CI — GitHub Actions (`ruff check` + `pytest --cov`, `gitleaks`), pre-commit-хуки; setup.py отсутствует, сборка как пакета не предусмотрена
 
 ### Структура
 
@@ -51,7 +52,7 @@ src/                   — весь код: плоские модули + пак
   file_lock.py         — FileLock: кроссплатформенная файловая блокировка (fcntl/msvcrt)
   commands.py          — Commands: команды проекта (status, help, start, stop) — не знают про транспорт
   stop_flag.py         — StopFlag: файловый флаг остановки сессии между процессами
-  vk_autoliker_bot.py  — VkAutoLikerBot: VK-бот (long polling), запуск/статус из VK
+  vk_autoliker_bot.py  — VkAutoLikerBot: VK-бот (long polling), старт/стоп/статус/помощь из VK
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
@@ -63,12 +64,12 @@ src/                   — весь код: плоские модули + пак
   vk_api/              — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
-stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (242 жёстких + 36 мягких)
+stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (241 жёстких + 36 мягких)
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
-.idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset)
+.idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset + 4 Tests*)
 chrome_profile/        — профиль Chrome (в .gitignore), хранит сессию VK
-~/Library/LaunchAgents/ru.vkautoliker.bot.plist — автозапуск VK-бота (launchd, опционально; основной запуск — вручную, `python src/main.py bot`); авто-расписание Mac (ru.vkautoliker.plist) удалено
+~/Library/LaunchAgents/ru.vkautoliker.bot.plist — опциональный автозапуск VK-бота (launchd на Mac / Task Scheduler на Windows, см. README); авто-расписания сессий нет
 ```
 
 **Важно про импорты:** импорты плоские по имени файла/пакета
@@ -103,7 +104,7 @@ python src/main.py run      # 2-й шаг: основная сессия лай�
 python src/main.py run --no-limit  # ручной запуск без учёта дневного лимита (is_auto=0)
 python src/main.py test     # диагностика: проверка API-поиска + лайк на одном посте
 python src/main.py status   # статус: идущая/последняя сессия, за сегодня и всего
-python src/main.py reset    # полная очистка SQLite-базы (обработанные посты и сессии)
+python src/main.py reset    # полная очистка SQLite-базы (обработанные посты, сессии, кэш стен)
 python src/main.py bot      # VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK
 ```
 
@@ -117,20 +118,21 @@ python src/main.py bot      # VK-бот: резидентный long polling —
 
 ### Готовые конфигурации запуска (PyCharm)
 
-В `.idea/runConfigurations/` лежат `VkAutoLiker_Login.xml`, `VkAutoLiker_Run.xml`,
-`VkAutoLiker_Test.xml`, `VkAutoLiker_Status.xml`, `VkAutoLiker_Reset.xml` — каждый содержит
-подробный HTML-комментарий с описанием сценария и эквивалентной командой терминала.
+В `.idea/runConfigurations/` 9 run-configs: `VkAutoLiker_Login.xml`, `VkAutoLiker_Run.xml`,
+`VkAutoLiker_Test.xml`, `VkAutoLiker_Status.xml`, `VkAutoLiker_Reset.xml` и 4 Tests*
+(юниты, browser, покрытие, быстрое) — каждый содержит подробный HTML-комментарий
+с описанием сценария и эквивалентной командой терминала.
 Это самый быстрый способ свериться с ожидаемым поведением.
 
 ### Тесты
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (259 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (255 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (85%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -140,7 +142,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 259 тестов, маркер не нужен.
+- Юнит-тесты на моках — 255 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -158,7 +160,8 @@ pytest -m "not browser and not live"    # базовая страховка по
 ### Стиль кода
 
 - **Только типизированные сигнатуры:** все `def` аннотированы (`-> None`, `-> List[Post]`).
-  Контракты описаны через `pydantic.BaseModel`, а не через словари.
+  Контракты описаны через dataclass (`Post`, `PipelineContext`, `StopMatch`,
+  `SessionStats`, `LastSession`), а не через словари; pydantic — только `Settings`.
 - **Документация на русском.** Каждый модуль и каждый публичный метод имеет docstring на
   русском языке, объясняющий *зачем*, а не *что*. Комментарии в теле кода — редкие, только
   про неочевидные причины (пример: «После клика aria-label меняется — ищем селектор заново»).
@@ -170,7 +173,7 @@ pytest -m "not browser and not live"    # базовая страховка по
   `_newsfeed_search`, `_rate_limit`).
 - **Исключения:** доменные ошибки (`VKApiError`, `CaptchaError`), а не голые `Exception`.
   Ошибки обработки одного поста логируются и не роняют сессию (`try/except` + `continue`).
-- **`main.py`** перехватывает `FileNotFoundError`/`ValueError` → текст в `stderr` и
+- **`main.py`** перехватывает `ValueError` → текст в `stderr` и
   `sys.exit(1)`, `KeyboardInterrupt` → `Прервано (Ctrl+C)` в `stderr` и `sys.exit(130)`
   — Ctrl+C на любом этапе (старт браузера, проверка авторизации, jitter) не даёт трейсбэка.
 - Пиковая длина строки — около 100 символов; `snake_case` для функций/атрибутов,
@@ -248,7 +251,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     при `VKApiError` с кодами 15 (access denied), 18 (deleted/banned), 30 (profile private)
     стена помечается через `mark_wall_closed`. `get_wall_posts()` re-raise'ит эти ошибки,
     вызывающий код в `CollectStage` ловит и кэширует. TTL — `closed_wall_ttl_days`
-    (дефолт 7, env `VK_CLOSED_WALL_TTL_DAYS`). Предотвращает ~38% пустых API-вызовов на закрытые стены друзей.
+    (дефолт 7, env `VK_CLOSED_WALL_TTL_DAYS`). Предотвращает пустые API-вызовы на закрытые стены друзей.
 11. **Источник лайков в приоритетном порядке:** queries → hashtags → groups → accounts →
     auto_friends → auto_groups. Каждый следующий источник собирается только если
     предыдущие не набрали `enough` постов. Финального перемешивания между источниками нет.
@@ -278,7 +281,8 @@ pytest -m "not browser and not live"    # базовая страховка по
 15. **Burst-смягчение.** Каждые `random.randint(5, 10)` лайков — длинная пауза
     `random.uniform(60, 180)` сек для имитации отвлечения.
 16. **`like()` возвращает `LikeResult`** (LIKED / ALREADY_LIKED / CAPTCHA / FAILED) —
-    отдельный `is_liked()` не нужен, двойная навигация устранена.
+    отдельного `is_liked()` нет — проверка стоит ли лайк выполняется внутри
+    `like()`, двойной навигации нет.
 17. **Chrome version auto-detect.** `vk_browser.py` определяет версию Chrome: на Windows
     читает реестр (`HK{CU,LM}\Software\Google\Chrome\BLBeacon` — `chrome.exe --version`
     там ничего не печатает), на остальных ОС — `subprocess`. Передаёт `version_main`
@@ -287,11 +291,11 @@ pytest -m "not browser and not live"    # базовая страховка по
     пар задержек/лимитов, `days_back > 0`, `user_id > 0` при `auto_friends`/`auto_groups`,
     `filter_mode` (`"stop_words"`/`"review"`/`"llm"`) и `llm_model` + `llm_api_key`
      при `review`/`llm` (оба или ни одного; в `stop_words` half-конфиг LLM не ошибка).
-21. **Секреты через env vars.** `service_token` и `llm_api_key` — `SecretStr`, загружаются
+19. **Секреты через env vars.** `service_token` и `llm_api_key` — `SecretStr`, загружаются
     из env vars `VK_SERVICE_TOKEN` и `VK_LLM_API_KEY`.
     `SecretStr` маскирует значение в `repr()` и логах; получить строку — `.get_secret_value()`.
     `.env` в `.gitignore`.
-19. **Декомпозиция PostFilter.** Пакет `post_filter/` содержит `PostFilterProtocol` (Protocol),
+20. **Декомпозиция PostFilter.** Пакет `post_filter/` содержит `PostFilterProtocol` (Protocol),
     `DateFilter`, `EmptyTextFilter`, `StopWordsFilter`, `LLMTopicFilter` (один класс — одна проверка) и
     `FilterChain` (композит structural: `DateFilter` + `EmptyTextFilter`, без стоп-слов и LLM).
     `FilterChain.should_skip(post)` — per-post проверка structural-фильтров.
@@ -315,7 +319,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     OK — на DEBUG. В конце сбора `CollectStage` вызывает `FilterChain.log_summaries()` →
     `StopWordsFilter.log_summary()`: в stop_words-режиме — `Стоп-слова: проверено N, отсеяно M (X%)`,
     в review-режиме — `Стоп-слова: проверено N, помечено M для LLM`.
-20. **Три режима filter_mode.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию), `"review"`,
+21. **Три режима filter_mode.** `filter_mode` в `Settings`: `"stop_words"` (по умолчанию), `"review"`,
     `"llm"`. `"review"`/`"llm"` требуют и `VK_LLM_MODEL`, и `VK_LLM_API_KEY` (both-or-neither),
     иначе ошибка валидации при старте; в режиме `"stop_words"` half-конфигурация LLM не ошибка.
     **`stop_words`**: жёсткие слова отсекают посты при сборе, мягкие проходят — LLM не участвует.
@@ -446,7 +450,7 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Эксплуатационные ограничения
 
-Проект автоматизирует реальный аккаунт VK. Дефолт (`20–30 лайков/сессия`, `3 сессии/день`,
+Проект автоматизирует реальный аккаунт VK. Дефолт (`40–50 лайков/сессия`, `3 сессии/день`,
 паузы 15–60 сек) выбран для снижения риска бана. Прежде чем повышать лимиты, убирать
 задержки, отключать антидетект-настройки Chrome или расширять круг источников, —
 остановиться и спросить пользователя. `max_captcha_streak` заложен как стоп-условие:

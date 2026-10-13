@@ -204,8 +204,8 @@ class VkAutoLikerBot:
         сообщения владельца приходят с разными значениями (наблюдались 1
         и 3), как и эхо.
 
-        Live-форма 12.10: нажатие inline-кнопки приходит СЮДА ЖЕ (код 4),
-        а не кодом 58: text (raw[5]) — метка кнопки («ℹ️ Статус»), а payload
+        Нажатие inline-кнопки (type=text) приходит СЮДА ЖЕ событием MESSAGE_NEW
+        (код 4), а не кодом 58: text (raw[5]) — метка кнопки («ℹ️ Статус»), а payload
         лежит в extra-словаре (raw[6]): {'emoji': '1', 'payload':
         '{"command":"status"}', ...}. Payload кладём в событие — обработчик
         отдаёт ему приоритет над текстом.
@@ -234,7 +234,7 @@ class VkAutoLikerBot:
     def _decode_message_event(self, raw: Any) -> dict | None:
         """Один компактный event: message_event (код 58) → словарь, остальное — None.
 
-        Compact-формат VK (предварительный, подтвердится live-проверкой):
+        Compact-формат VK (не подтверждён live):
         [58, event_id, user_id, peer_id, ts, action, label, payload, ...]
         payload — JSON-строка {"command": "start"|"stop"|"status"}.
         """
@@ -319,11 +319,10 @@ class VkAutoLikerBot:
     def _handle_message_event(self, event: dict) -> None:
         """Callback-кнопка (код 58): ack, проверка владельца, payload-команда.
 
-        Live-наблюдение 12.10 показало: inline-кнопки type=text приходят
-        как MESSAGE_NEW с payload в extra, а не этим событием. Ветку
-        сохраняем на случай кнопок callback-типа. VK требует на каждое
-        событие 58 ответ messages.sendMessageEventAnswer (без него —
-        бесконечные ределиверы), поэтому ack отправляется первым, до
+        Inline-кнопки type=text приходят как MESSAGE_NEW с payload в extra,
+        а не этим событием. Ветку сохраняем на случай кнопок callback-типа.
+        VK требует на каждое событие 58 ответ messages.sendMessageEventAnswer
+        (без него — бесконечные ределиверы), поэтому ack отправляется первым, до
         проверки владельца и payload: чужое или битое событие тоже
         отвечает.
         """

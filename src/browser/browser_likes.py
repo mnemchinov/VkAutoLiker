@@ -58,22 +58,6 @@ class BrowserLikesService:
         self._config = config
         self._logger = logger
 
-    def is_liked(self, owner_id: int, item_id: int) -> bool:
-        """Проверяет, стоит ли лайк на посте, по aria-label кнопки внутри контейнера поста.
-
-        Навигация на пост + проверка без клика. Основной цикл run() использует
-        like(), который проверяет лайк внутри себя и не требует двойной навигации.
-        """
-        post_url = build_post_url(owner_id, item_id)
-        self._browser.navigate(post_url)
-
-        element = self._find_like_button(owner_id, item_id)
-        if element is None:
-            self._logger.warning(f"Кнопка лайка не найдена: {owner_id}_{item_id}")
-            return False
-
-        return self._check_liked(element)
-
     def like(self, owner_id: int, item_id: int) -> LikeResult:
         """Ставит лайк: навигация → «чтение» → клик → проверка.
 

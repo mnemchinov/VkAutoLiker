@@ -110,7 +110,7 @@ class LLMTopicFilter(PostFilterProtocol):
             answer = response.choices[0].message.content.strip().upper()
             skip = "SKIP" in answer
             self._logger.info(
-                f"LLM: пост {post.owner_id}_{post.item_id} → ответ={answer!r} skip={skip}"
+                f"LLM: пост {post.owner_id}_{post.item_id} → ответ={answer!r} отсеян={skip}"
             )
             return skip
         except litellm.Timeout as e:

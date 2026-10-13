@@ -15,8 +15,9 @@ description: Перед проектированием нового класса
 ## Архитектурный выбор: композиция
 
 Проект использует **композицию**, не наследование. `AutoLiker` содержит сервисы
-как атрибуты (`self._search_service`, `self._likes_service`, `self._state`,
-`self._filter`, `self._browser`), каждый со своим `__init__`.
+как атрибуты (`self._api_client`, `self._search_service`, `self._browser`,
+`self._likes_service`, `self._db`, `self._posts_repo`, `self._sessions_repo`,
+`self._walls_repo`, `self._stop_flag`, `self._pipeline`), каждый со своим `__init__`.
 
 **Почему композиция:**
 
@@ -46,7 +47,7 @@ description: Перед проектированием нового класса
 ### Один класс = один файл
 
 Каждый сервис — отдельный файл в `src/`. Имя файла = `snake_case` имени класса:
-`VkApiSearchService` → `vk_api_search_service.py`, `BrowserLikesService` → `browser_likes.py`.
+`VkApiSearchService` → `vk_api/vk_api_search_service.py`, `BrowserLikesService` → `browser/browser_likes.py`.
 
 ### DI через конструктор
 
@@ -99,15 +100,15 @@ class MyService:
 
 | Класс | Файл | Ответственность |
 |---|---|---|
-| `VKApiClient` | `vk_api_client.py` | HTTP-клиент VK API: rate-limit, ретраи, ошибки 6/14 |
-| `VkApiSearchService` | `vk_api_search_service.py` | Обёртка над VK API: newsfeed.search, wall.get, friends.get, groups.get |
-| `BrowserLikesService` | `browser_likes.py` | Клик по лайку через Selenium + верификация |
-| `VKBrowser` | `vk_browser.py` | Обёртка над Selenium + антидетект + stale Chrome cleanup |
+| `VKApiClient` | `vk_api/vk_api_client.py` | HTTP-клиент VK API: rate-limit, ретраи, ошибки 6/14 |
+| `VkApiSearchService` | `vk_api/vk_api_search_service.py` | Обёртка над VK API: newsfeed.search, wall.get, friends.get, groups.get |
+| `BrowserLikesService` | `browser/browser_likes.py` | Клик по лайку через Selenium + верификация |
+| `VKBrowser` | `browser/vk_browser.py` | Обёртка над Selenium + антидетект + stale Chrome cleanup |
 | `Database` | `database.py` | Подключение SQLite |
 | `PostsRepository` | `repositories/posts_repository.py` | SQLite: processed_posts (is_processed, mark_processed) |
 | `SessionsRepository` | `repositories/sessions_repository.py` | SQLite: sessions (start/end, статистика) |
-| `WallsRepository` | `repositories/walls_repository.py` | SQLite: closed_walls (кэш закрытых стен) |
-| `FilterChain` | `post_filter.py` | Композит: DateFilter + EmptyTextFilter + StopWordsFilter |
-| `LLMTopicFilter` | `post_filter.py` | LLM-фильтр тематики (PostFilterProtocol, litellm) |
-| `LLMFilterStage` | `stage_llm_filter.py` | Pipeline-стадия: LLM-фильтрация после DedupStage (опц.) |
+| `ClosedWallsRepository` | `repositories/closed_walls_repository.py` | SQLite: closed_walls (кэш закрытых стен) |
+| `FilterChain` | `post_filter/filter_chain.py` | Композит: DateFilter + EmptyTextFilter |
+| `LLMTopicFilter` | `post_filter/llm_topic_filter.py` | LLM-фильтр тематики (PostFilterProtocol, litellm) |
+| `LLMFilterStage` | `stages/stage_llm_filter.py` | Pipeline-стадия: LLM-фильтрация после DedupStage (опц.) |
 | `AutoLiker` | `liker.py` | Оркестратор: сбор → фильтрация → лайки → запись |
