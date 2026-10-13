@@ -2,8 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from api_client import CaptchaError, VKApiError, VkApiSearchService
 from post import Post
-from vk_api import CaptchaError, VKApiError, VkApiSearchService
 
 
 class TestVkApiSearchService:

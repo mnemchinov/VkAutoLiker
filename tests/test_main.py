@@ -66,7 +66,26 @@ class TestMain:
             patch("main.get_settings", return_value=mock_config),
             patch("main.AppLogger"),
             patch("main.AutoLiker") as mock_liker_cls,
-            patch("main.VkAutoLikerBot") as mock_bot_cls,
+            patch("main.VkBot") as mock_bot_cls,
+            patch.object(sys, "argv", ["main.py", "bot"]),
+        ):
+            with pytest.raises(SystemExit) as exc:
+                main.main()
+
+        assert exc.value.code == 1
+        mock_bot_cls.assert_not_called()
+        mock_liker_cls.assert_not_called()
+
+    def test_bot_without_user_id_exits_1(self):
+        """Команда bot с токеном, но без VK_USER_ID — exit(1), бот не создаётся."""
+        mock_config = MagicMock()
+        mock_config.bot_token.get_secret_value.return_value = "test-token"
+        mock_config.user_id = 0
+        with (
+            patch("main.get_settings", return_value=mock_config),
+            patch("main.AppLogger"),
+            patch("main.AutoLiker") as mock_liker_cls,
+            patch("main.VkBot") as mock_bot_cls,
             patch.object(sys, "argv", ["main.py", "bot"]),
         ):
             with pytest.raises(SystemExit) as exc:

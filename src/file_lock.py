@@ -6,6 +6,7 @@ _kill_stale_chrome(), после чего первый работал бы с м
 (invalid session id).
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import BinaryIO
@@ -35,6 +36,11 @@ class FileLock:
 
         self._path.touch(exist_ok=True)
         handle = open(self._path, "r+b")
+        # msvcrt.locking на Windows не может заблокировать несуществующий байт:
+        # в пустой файл до блокировки дописывается 1 байт
+        if os.fstat(handle.fileno()).st_size == 0:
+            handle.write(b"\0")
+            handle.flush()
         try:
             if sys.platform == "win32":
                 handle.seek(0)

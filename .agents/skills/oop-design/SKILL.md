@@ -47,7 +47,7 @@ description: Перед проектированием нового класса
 ### Один класс = один файл
 
 Каждый сервис — отдельный файл в `src/`. Имя файла = `snake_case` имени класса:
-`VkApiSearchService` → `vk_api/vk_api_search_service.py`, `BrowserLikesService` → `browser/browser_likes.py`.
+`VkApiSearchService` → `api_client/vk_api_search_service.py`, `BrowserLikesService` → `browser/browser_likes.py`.
 
 ### DI через конструктор
 
@@ -100,8 +100,8 @@ class MyService:
 
 | Класс | Файл | Ответственность |
 |---|---|---|
-| `VKApiClient` | `vk_api/vk_api_client.py` | HTTP-клиент VK API: rate-limit, ретраи, ошибки 6/14 |
-| `VkApiSearchService` | `vk_api/vk_api_search_service.py` | Обёртка над VK API: newsfeed.search, wall.get, friends.get, groups.get |
+| `VKApiClient` | `api_client/vk_api_client.py` | HTTP-клиент VK API: rate-limit, ретраи, ошибки 6/14 |
+| `VkApiSearchService` | `api_client/vk_api_search_service.py` | Обёртка над VK API: newsfeed.search, wall.get, friends.get, groups.get |
 | `BrowserLikesService` | `browser/browser_likes.py` | Клик по лайку через Selenium + верификация |
 | `VKBrowser` | `browser/vk_browser.py` | Обёртка над Selenium + антидетект + stale Chrome cleanup |
 | `Database` | `database.py` | Подключение SQLite |

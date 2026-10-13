@@ -49,6 +49,20 @@ class TestFileLock:
         lock.release()
         lock.release()
 
+    def test_acquire_empty_file(self, tmp_path):
+        """Пустой лок-файл (touch без содержимого) блокируется.
+
+        msvcrt.locking на Windows не может заблокировать несуществующий
+        байт: до блокировки в пустой файл дописывается 1 байт.
+        """
+        lock_path = tmp_path / ".autoliker.lock"
+        lock_path.touch()
+        lock = FileLock(lock_path)
+
+        assert lock.acquire() is True
+        assert lock_path.stat().st_size >= 1
+        lock.release()
+
     def test_acquire_idempotent(self, tmp_path):
         """Повторный acquire на том же объекте возвращает True."""
         lock_path = tmp_path / ".autoliker.lock"

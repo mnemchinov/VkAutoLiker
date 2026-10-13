@@ -255,7 +255,7 @@ class TestCollectStage:
 
     def test_vkapierror_on_wall_get_skips_source(self, collect_stage, mock_config):
         """VKApiError на get_wall_posts — источник пропускается, сбор продолжается."""
-        from vk_api import VKApiError
+        from api_client import VKApiError
 
         mock_config.queries = []
         mock_config.hashtags = []
@@ -277,7 +277,7 @@ class TestCollectStage:
 
     def test_captcha_from_wall_get_stops_session(self, collect_stage, mock_config):
         """CaptchaError от get_wall_posts — пробрасывается, сессия останавливается."""
-        from vk_api import CaptchaError
+        from api_client import CaptchaError
 
         mock_config.queries = []
         mock_config.hashtags = []
@@ -297,7 +297,7 @@ class TestCollectStage:
 
     def test_captcha_from_friends_get_stops_session(self, collect_stage, mock_config):
         """CaptchaError от get_friends — пробрасывается, сессия останавливается."""
-        from vk_api import CaptchaError
+        from api_client import CaptchaError
 
         mock_config.auto_friends = True
         mock_config.auto_groups = False

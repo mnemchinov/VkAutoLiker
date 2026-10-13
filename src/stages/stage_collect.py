@@ -16,12 +16,12 @@ is_processed проверяется до stop_words намеренно: уже �
 
 import random
 
+from api_client import CaptchaError, VKApiError, VkApiSearchService
 from logger import AppLogger
 from post import Post, PostReview, PostStatus
 from post_filter import FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository
 from settings import Settings
-from vk_api import CaptchaError, VKApiError, VkApiSearchService
 
 from .pipeline import PipelineContext
 
