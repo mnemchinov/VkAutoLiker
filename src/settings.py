@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     Лимиты/задержки: likes_per_session_min/max, sessions_per_day, delays, max_captcha_streak.
     Логирование: log_level, log_file.
     SQLite: db_path.
-    VK-бот: bot_token.
+    VK-бот: bot_token. Telegram-бот: telegram_bot_token, telegram_owner_id.
     """
 
     model_config = SettingsConfigDict(
@@ -126,6 +126,10 @@ class Settings(BaseSettings):
     # VK-бот (long polling): запуск сессий и статус из сообщений VK
     bot_token: SecretStr = SecretStr("")
 
+    # Telegram-бот (long polling): те же команды из сообщений Telegram
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_owner_id: int = 0
+
     @field_validator(
         "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"
     )
@@ -148,7 +152,8 @@ class Settings(BaseSettings):
 
         min<=max для всех пар задержек/лимитов, days_back>0,
         user_id>0 при auto_friends/auto_groups,
-        llm_model + llm_api_key при filter_mode 'review'/'llm' (оба или ни одного).
+        llm_model + llm_api_key при filter_mode 'review'/'llm' (оба или ни одного),
+        telegram_owner_id>0 при заданном telegram_bot_token.
         """
         if self.likes_per_session_min > self.likes_per_session_max:
             raise ValueError("likes_per_session_min > likes_per_session_max")
@@ -169,6 +174,8 @@ class Settings(BaseSettings):
                 f"filter_mode='{self.filter_mode}' требует llm_model и llm_api_key "
                 "(оба или ни одного)"
             )
+        if self.telegram_bot_token.get_secret_value() and self.telegram_owner_id <= 0:
+            raise ValueError("telegram_owner_id должен быть > 0 при заданном telegram_bot_token")
         return self
 
 

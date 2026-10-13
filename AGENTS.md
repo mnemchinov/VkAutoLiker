@@ -47,13 +47,15 @@ pytest.ini             — регистрация маркеров browser / liv
 requirements.txt       — зависимости
 README.md              — документация проекта
 .gitignore             — исключения (chrome_profile, *.db, *.log, .venv и т.д.)
-src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, api_client/, vk_bot/, repositories/, migrations/)
-  main.py              — CLI-точка входа (login|run|test|status|reset|bot)
+src/                   — весь код: плоские модули + пакеты (browser/, post_filter/, stages/, api_client/, vk_bot/, telegram_bot/, repositories/, migrations/)
+  main.py              — CLI-точка входа (login|run|test|status|reset|vkbot|tgbot)
   file_lock.py         — FileLock: кроссплатформенная файловая блокировка (fcntl/msvcrt)
   commands.py          — Commands: команды проекта (status, help, start, stop) — не знают про транспорт
   stop_flag.py         — StopFlag: файловый флаг остановки сессии между процессами
   vk_bot/            — VK-бот: vk_bot.py (VkBot — long-polling-демон на библиотеке
-                       vk_api, мапа команд, клавиатура)
+                        vk_api, мапа команд, клавиатура)
+  telegram_bot/      — Telegram-бот: telegram_bot.py (TelegramBot — long-polling-демон
+                        на pyTelegramBotAPI, та же мапа команд, доступ только владельцу)
   liker.py             — AutoLiker: оркестратор всего цикла
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
@@ -106,7 +108,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 python src/main.py test     # диагностика: проверка API-поиска + лайк на одном посте
 python src/main.py status   # статус: идущая/последняя сессия, за сегодня и всего
 python src/main.py reset    # полная очистка SQLite-базы (обработанные посты, сессии, кэш стен)
-python src/main.py bot      # VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK
+python src/main.py vkbot    # VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK
+python src/main.py tgbot    # Telegram-бот: резидентный long polling — старт/стоп/статус/помощь из Telegram
 ```
 
 **Авто-расписание Mac (launchd) удалено** — сессии запускаются через VK-бота
@@ -129,7 +132,7 @@ python src/main.py bot      # VK-бот: резидентный long polling —
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (260 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (291 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -143,7 +146,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 260 тестов, маркер не нужен.
+- Юнит-тесты на моках — 291 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -151,7 +154,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
 ```bash
 ruff check src/ tests/                 # линтер (pyflakes, isort, pyupgrade, pycodestyle)
 pytest -m "not browser and not live"    # базовая страховка после любой правки
-.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings, commands, vk_bot; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
+.venv/bin/python -c "import sys; sys.path.insert(0,'src'); import liker, database, settings, commands, vk_bot, telegram_bot; from migrations import run_migrations; from repositories import PostsRepository, SessionsRepository, ClosedWallsRepository; print('OK')"
 ```
 
 ---
@@ -358,7 +361,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     Парсится в `_parse_wall_item()` и `_parse_newsfeed_item()`.
     `CollectStage._accept()` исключает посты где `from_id == config.user_id` —
     лайкать собственные посты на стенах групп и друзей не нужно.
-23. **VK-бот.** `VkBot` — резидентный long-polling-демон (`python src/main.py bot`,
+23. **VK-бот.** `VkBot` — резидентный long-polling-демон (`python src/main.py vkbot`,
     запуск вручную; автозапуск — launchd/Task Scheduler, опционально, см. README). Демон
     **не берёт сессионную
     блокировку** `.autoliker.lock` (завис в ней — заблокировал бы все сессии); у него своя
@@ -424,12 +427,20 @@ pytest -m "not browser and not live"    # базовая страховка по
     за свой день — сессия реально стартовала. Известное ограничение: повторное
     использование OS pid мёртвой сессии новым процессом оставит зомби незымкнутым
     (macOS pids оборачиваются на 99999 — вероятность пренебрежима).
+25. **Telegram-бот.** `TelegramBot` (telegram_bot.py) — long-polling-демон на
+    `pyTelegramBotAPI` (`python src/main.py tgbot`), аналог `VkBot`: те же
+    `Commands`, личка владельца только (`from_user.id == telegram_owner_id`),
+    своя блокировка демона `.autoliker.tgbot.lock` (VK-бота и сессии не
+    блокирует), `threaded=False` — хендлеры и SQLite-коннект `Commands` в одном
+    потоке. Собственные исходящие Telegram боту не возвращает — эхо-трекинг
+    (в отличие от VK `_sent_ids`) не нужен. Сетевой сбой при проверке токена —
+    ретрай `random.uniform(5, 15)`, 401 — чистый выход.
 
 ### Практики тестирования
 
 - Один класс тестов на модуль: `TestSettings`, `TestVKApiClient`, `TestVkApiSearchService`,
   `TestDateFilter`, `TestEmptyTextFilter`, `TestStopWordsFilter`, `TestFilterChain`,
-  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`, `TestCommands`, `TestVkBot`, `TestStopFlag`.
+  `TestLLMTopicFilter`, `TestLLMFilterStage`, `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations`, `TestBrowserLikesMock`, `TestVKBrowserIsLoggedIn`, `TestCommands`, `TestVkBot`, `TestTelegramBot`, `TestStopFlag`.
 - **Моки вместо сети и браузера:** `MagicMock` для `VKApiClient`, `VKBrowser`, `driver`;
   `patch("api_client.vk_api_client.requests.get")` и `patch("api_client.vk_api_client.time.sleep")` — тесты
   не должны спать и не должны ходить в интернет.

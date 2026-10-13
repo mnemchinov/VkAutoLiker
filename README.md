@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-260%20passed-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-291%20passed-brightgreen?logo=pytest)
 ![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
@@ -145,7 +145,8 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `python src/main.py test` | Диагностика: поиск + лайк на одном посте |
 | `python src/main.py status` | Идущая/последняя сессия, сессии/лайки за сегодня и всего |
 | `python src/main.py reset` | Очистка SQLite (обработанные посты, сессии, кэш стен) |
-| `python src/main.py bot` | VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK |
+| `python src/main.py vkbot` | VK-бот: резидентный long polling — старт/стоп/статус/помощь из VK |
+| `python src/main.py tgbot` | Telegram-бот: резидентный long polling — старт/стоп/статус/помощь из Telegram |
 | `pytest` | Запуск тестов |
 | `pytest -m "not browser and not live"` | Только юнит-тесты (без браузера и сети) |
 | `pytest --cov=src --cov-report=term-missing` | Тесты с покрытием |
@@ -271,6 +272,17 @@ VK_LLM_SSL_VERIFY=false
 Токен: сообщество → Настройки → Bot API → включить → «Получить токен доступа».
 Команды и автозапуск — в разделе [Автоматизация](#автоматизация).
 
+### Telegram-бот
+
+| Параметр | Переменная | Описание |
+|---|---|---|
+| telegram_bot_token | VK_TELEGRAM_BOT_TOKEN | Токен бота от @BotFather (SecretStr); пусто — бот отключён |
+| telegram_owner_id | VK_TELEGRAM_OWNER_ID | Числовой Telegram-id владельца; обрабатываются только сообщения от него |
+
+Токен: бот @BotFather → `/newbot` → токен. Свой id: бот @userinfobot отвечает
+числом. Команда запуска — `python src/main.py tgbot`, команды бота те же, что
+у VK-бота: старт/стоп/статус/помощь.
+
 ## Источники постов
 
 Посты собираются с приоритетом (лимит расходуется в порядке):
@@ -354,7 +366,7 @@ VK-сессию (профиль Chrome), иначе сессии не запус
 1. Сообщество с включённым **Bot API** (Настройки → Bot API → включить →
    «Получить токен доступа»).
 2. `.env`: `VK_BOT_TOKEN=<токен>`.
-3. Запуск: `python src/main.py bot` — бот работает, пока открыто окно
+3. Запуск: `python src/main.py vkbot` — бот работает, пока открыто окно
    (терминал/PyCharm). Это основной способ запуска.
 
 **Автозапуск без окна (опционально), Mac (launchd):**
@@ -372,7 +384,7 @@ VK-сессию (профиль Chrome), иначе сессии не запус
     <array>
         <string>/путь/к/.venv/bin/python</string>
         <string>/путь/к/VkAutoLiker/src/main.py</string>
-        <string>bot</string>
+        <string>vkbot</string>
     </array>
     <key>WorkingDirectory</key><string>/путь/к/VkAutoLiker</string>
     <key>RunAtLoad</key><true/>
@@ -418,6 +430,22 @@ launchctl list | grep vkautoliker                                               
 > `run` (без `--no-limit`) считается автозапуском (`is_auto=1`) и расходует дневной лимит.
 > `run --no-limit` — ручной запуск, лимит не тратится.
 
+### Telegram-бот (резидент)
+
+Транспорт, аналогичный VK-боту: резидентный процесс (long polling) слушает
+сообщения в личной беседе с ботом и запускает сессии по команде `старт`.
+Обрабатываются только сообщения владельца (`from_user.id == VK_TELEGRAM_OWNER_ID`),
+сообщения в группах игнорируются.
+
+1. Бот от @BotFather (`/newbot`).
+2. `.env`: `VK_TELEGRAM_BOT_TOKEN=<токен>`, `VK_TELEGRAM_OWNER_ID=<ваш id>`
+   (id выдает бот @userinfobot).
+3. Запуск: `python src/main.py tgbot` — бот работает, пока открыто окно.
+
+Команды и поведение — как у VK-бота (таблица команд выше): та же мапа команд,
+та же inline-клавиатура `[▶️ Старт | ⏹ Стоп | ℹ️ Статус]`, `старт` запускает
+сессию отдельным процессом, по завершении — отдельное сообщение.
+
 ### Windows (Task Scheduler)
 
 Автозапуск бота (опционально): задача при входе в систему + перезапуск
@@ -425,7 +453,7 @@ launchctl list | grep vkautoliker                                               
 сбоев», через 1 минуту):
 
 ```powershell
-schtasks /create /tn "VkAutoLiker_Bot" /tr "cmd /c cd /d C:\VkAutoLiker && .venv\Scripts\python.exe src\main.py bot" /sc onlogon /f
+schtasks /create /tn "VkAutoLiker_Bot" /tr "cmd /c cd /d C:\VkAutoLiker && .venv\Scripts\python.exe src\main.py vkbot" /sc onlogon /f
 ```
 
 ```powershell

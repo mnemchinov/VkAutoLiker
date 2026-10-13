@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Точка входа CLI: login | run | test | status | reset | bot."""
+"""Точка входа CLI: login | run | test | status | reset | vkbot | tgbot."""
 
 import argparse
 import sys
@@ -12,6 +12,7 @@ from file_lock import FileLock
 from liker import AutoLiker
 from logger import AppLogger
 from settings import get_settings
+from telegram_bot import TelegramBot
 from vk_bot import VkBot
 
 # Файл-блокировка: предотвращает двойной запуск (два процесса одновременно)
@@ -50,7 +51,8 @@ def main() -> None:
     subparsers.add_parser("test", help="Тест поиска и лайка на одном посте")
     subparsers.add_parser("status", help="Показать статистику сессий и лайков")
     subparsers.add_parser("reset", help="Очистить базу состояния")
-    subparsers.add_parser("bot", help="Запустить VK-бота (long polling, резидентный демон)")
+    subparsers.add_parser("vkbot", help="Запустить VK-бота (long polling, резидентный демон)")
+    subparsers.add_parser("tgbot", help="Запустить Telegram-бота (long polling, резидентный демон)")
 
     args = parser.parse_args()
 
@@ -62,7 +64,7 @@ def main() -> None:
         config = get_settings()
         logger = AppLogger(config)
 
-        if command == "bot":
+        if command == "vkbot":
             # Демон не берёт сессионную блокировку: он резидентный, и взял
             # бы её — заблокировал все сессии
             if not config.bot_token.get_secret_value():
@@ -72,6 +74,18 @@ def main() -> None:
                 print("VK_USER_ID не задан в .env", file=sys.stderr)
                 sys.exit(1)
             VkBot(config, logger).run()
+            return
+
+        if command == "tgbot":
+            # Демон не берёт сессионную блокировку: он резидентный, и взял
+            # бы её — заблокировал все сессии
+            if not config.telegram_bot_token.get_secret_value():
+                print("VK_TELEGRAM_BOT_TOKEN не задан в .env", file=sys.stderr)
+                sys.exit(1)
+            if not config.telegram_owner_id:
+                print("VK_TELEGRAM_OWNER_ID не задан в .env", file=sys.stderr)
+                sys.exit(1)
+            TelegramBot(config, logger).run()
             return
 
         lock = _acquire_lock()

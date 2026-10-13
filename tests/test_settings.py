@@ -88,6 +88,23 @@ class TestSettings:
         assert s.min_delay_sec == 1
         assert s.max_delay_sec == 2
 
+    def test_telegram_bot_fields(self, mock_config_data, monkeypatch):
+        """Поля Telegram-бота: токен в SecretStr, id владельца — int."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        s = Settings(_env_file=None, **mock_config_data)
+
+        assert s.telegram_bot_token.get_secret_value() == "test-tg-token"
+        assert s.telegram_owner_id == 999
+
+    def test_telegram_token_masked_in_repr(self, mock_config_data, monkeypatch):
+        """SecretStr маскирует telegram_bot_token в repr."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        s = Settings(_env_file=None, **mock_config_data)
+
+        assert "test-tg-token" not in repr(s)
+
 
 class TestEnvVars:
     """Тесты приоритета env vars над дефолтами."""
@@ -107,6 +124,24 @@ class TestEnvVars:
         s = Settings(_env_file=None)
 
         assert s.llm_api_key.get_secret_value() == "env_llm_key"
+
+    def test_telegram_bot_token_env_var(self, monkeypatch):
+        """VK_TELEGRAM_BOT_TOKEN env var перекрывает дефолт."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        monkeypatch.setenv("VK_TELEGRAM_BOT_TOKEN", "env_tg_token")
+        s = Settings(_env_file=None, telegram_owner_id=1)
+
+        assert s.telegram_bot_token.get_secret_value() == "env_tg_token"
+
+    def test_telegram_owner_id_env_var(self, monkeypatch):
+        """VK_TELEGRAM_OWNER_ID env var парсится как int."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        monkeypatch.setenv("VK_TELEGRAM_OWNER_ID", "555")
+        s = Settings(_env_file=None, telegram_bot_token="tok")
+
+        assert s.telegram_owner_id == 555
 
     def test_queries_env_var_comma_separated(self, monkeypatch):
         """VK_QUERIES парсится как comma-separated список."""
@@ -193,6 +228,31 @@ class TestValidation:
         monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
         with pytest.raises(ValidationError):
             Settings(_env_file=None, auto_friends=True, user_id=0)
+
+    def test_telegram_token_without_owner_raises(self, monkeypatch):
+        """telegram_bot_token без telegram_owner_id вызывает ValidationError."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, telegram_bot_token="tok")
+
+    def test_telegram_token_with_owner_ok(self, monkeypatch):
+        """telegram_bot_token + telegram_owner_id — валидная конфигурация."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        s = Settings(_env_file=None, telegram_bot_token="tok", telegram_owner_id=7)
+
+        assert s.telegram_bot_token.get_secret_value() == "tok"
+        assert s.telegram_owner_id == 7
+
+    def test_telegram_owner_without_token_ok(self, monkeypatch):
+        """telegram_owner_id без токена — валидно: бот просто не запускается."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        s = Settings(_env_file=None, telegram_owner_id=7)
+
+        assert s.telegram_bot_token.get_secret_value() == ""
+        assert s.telegram_owner_id == 7
 
 
 class TestGetSettings:
