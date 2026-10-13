@@ -76,6 +76,8 @@ def mock_config_data():
         "closed_wall_ttl_days": 7,
         "profile_max_size_mb": 500,
         "bot_token": "test-bot-token",
+        "telegram_bot_token": "test-tg-token",
+        "telegram_owner_id": 999,
     }
 
 
