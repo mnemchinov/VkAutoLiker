@@ -5,6 +5,34 @@ description: Перед написанием или правкой тестов.
 
 # Тестирование с моками VkAutoLiker
 
+## TL;DR
+
+Один класс тестов на модуль, файл `tests/test_<module>.py`. Не ходим в сеть и не
+запускаем Chrome (кроме `-m browser` / `-m live`). Мокаем сервисы через
+`MagicMock`, HTTP/sleep — через `@patch`. БД — только `tmp_path`. Токены —
+`"test_token"`. Лог-вывод проверяем через `caplog` и **реальный** логгер
+(`mock_logger`), не через `MagicMock`. Прогон: `pytest -m "not browser and not
+live"`.
+
+**Не загружать, если:**
+- Задача — реализовать код без тестов (это `implementation-cycle`, который сам
+  загрузит `testing-with-mocks` при необходимости).
+- Задача — прогнать существующие тесты, а не писать/править (это `pytest` напрямую).
+- Правка только в `conftest.py` без новых тестов — минимальный контекст, скил
+  не обязателен.
+
+**Маршруты:** при правке кода, затрагивающей тесты, — `implementation-cycle`.
+При появлении нового класса — `oop-design`. При ревью тестов — `code-review`.
+
+**Источники правды:** `pytest --collect-only -q` (список тестов), `pytest --cov`
+(покрытие), `tests/conftest.py` (фикстуры), `settings.py` (дефолты для
+`mock_config_data`).
+
+**Версия:** 1.1.0 | **Обновлён:** 2026-10-14
+- 1.1.0 — TL;DR, anti-triggers, карта маршрутов, формат вывода, частые ошибки,
+  источники правды, one-liners (без устаревших счётчиков).
+- 1.0.0 — базовые практики и таблица тестов.
+
 ## Когда загружать
 
 - Написание новых тестов
@@ -28,9 +56,12 @@ description: Перед написанием или правкой тестов.
 | `TestDatabase`, `TestPostsRepository`, `TestSessionsRepository`, `TestClosedWallsRepository`, `TestMigrations` | `test_database.py`, `test_posts_repository.py`, `test_sessions_repository.py`, `test_closed_walls_repository.py`, `test_migrations.py` | Database, репозитории, миграции (INSERT OR REPLACE, is_processed, сессии + зомби, closed-walls кэш) |
 | `TestCommands`, `TestVkBot`, `TestStopFlag`, `TestFileLock`, `TestMain` | `test_commands.py`, `test_vk_bot.py`, `test_stop_flag.py`, `test_file_lock.py`, `test_main.py` | команды, бот (клавиатура, ack), стоп-флаг, lock, CLI-ветки |
 | `TestBrowserLikesMock` | `test_browser_likes.py` | Селекторы, клик, верификация (на моках) |
-| `TestBrowserLikesFixture` | `test_browser_fixture.py` | DOM-селекторы на реальном Chrome + фиксут-страница (marker browser) |
+| `TestBrowserLikesFixture` | `test_browser_fixture.py` | DOM-селекторы на реальном Chrome + фикстур-страница (marker browser) |
 | `TestVKBrowserIsLoggedIn`, `TestVKBrowserClose`, `TestVKBrowserCleanup` | `test_vk_browser.py` | remixsid cookie, сетевой ретрай, close, cleanup |
 | `TestE2E` | `test_e2e.py` | e2e на реальном посте (marker live, skip по умолчанию) |
+
+> Таблица поддерживается вручную. **Сверка:** `pytest --collect-only -q`.
+> При добавлении/удалении тест-класса — обновлять таблицу.
 
 ## Моки вместо сети и браузера
 
@@ -86,7 +117,7 @@ def test_browser_method(mock_sleep):
 
 Объявлены в `pytest.ini`:
 
-- `@pytest.mark.browser` — тесты, требующие реальный Chrome (headless против фиксутуры)
+- `@pytest.mark.browser` — тесты, требующие реальный Chrome (headless против фикстуры)
 - `@pytest.mark.live` — e2e-тесты на реальном посте VK (запускаются только вручную после `login`)
 
 **Дефолтный прогон:**
@@ -119,10 +150,10 @@ def test_something(tmp_db_path):
 Доступ к приватным методам допустим: `svc._find_like_button(...)`,
 `VkApiSearchService._parse_newsfeed_item(...)` (как `staticmethod`).
 
-### HTML-фиксутура
+### HTML-фикстура
 
 `tests/fixtures/vk_post.html` повторяет разметку кнопки лайка. **При изменении
-DOM-селекторов — обновлять фиксут** и прогонять `pytest -m browser`.
+DOM-селекторов — обновлять фикстуру** и прогонять `pytest -m browser`.
 
 ### Логи — caplog
 
@@ -142,13 +173,13 @@ DOM-селекторов — обновлять фиксут** и прогоня
 
 ## Покрытие
 
-После правки — прогон с покрытием:
-
 ```bash
 pytest -m "not browser and not live" --cov=src --cov-report=term-missing
 ```
 
-Цель: ≥70%. Текущий эталон — 86% (260 тестов).
+Цель — **≥70%**. Актуальный эталон — по выводу команды (не хранить число в
+этом скиле: устаревает после первого коммита). При изменении тестов обновлять
+бейдж и счётчики в `README.md` / `AGENTS.md`, а не здесь.
 
 ## Паттерны тестирования AutoLiker и stages
 
@@ -166,3 +197,41 @@ pytest -m "not browser and not live" --cov=src --cov-report=term-missing
   лимит `min(target, pool)`, пауза только перед реально существующим
   следующим постом, досрочное завершение с причиной, daily limit,
   like success count, already-liked skip, exception → continue.
+
+## Формат вывода
+
+После правки тестов — отчёт:
+
+```
+## Тесты
+- **Новые:** <файл::Класс::тест>
+- **Изменённые:** <файл::Класс::тест>
+- **Прогон:** pytest -m "not browser and not live" → <passed/failed>
+- **Покрытие:** <из --cov, актуальное число>
+- **Marker-тесты:** <прогнаны или нет>
+```
+
+## Частые ошибки агента
+
+- **Мокать `mock_logger` как `MagicMock`** → `caplog` пуст, проверка лога не
+  работает. `mock_logger` — реальный логгер.
+- **Забыть `tmp_path`** → тест трогает боевую `vk_autoliker.db`.
+- **Использовать реальный токен** вместо `"test_token"`.
+- **Зависеть от сети/времени/порядка.** Тесты должны быть детерминированы.
+- **Не обновить `tests/fixtures/vk_post.html`** при правке DOM-селекторов.
+- **Писать ассерты на английские строки логов** — в проекте русский.
+
+## Примеры из истории
+
+- `test: Тесты Pipeline, CollectStage, DedupStage + адаптация
+  test_liker/test_post_filter` — рефакторинг тестов вслед за архитектурой.
+- Регрессионные тесты на инциденты (пробой фильтра на конкретном тексте) —
+  пример привязки к реальным данным.
+
+## Проверка
+
+```bash
+pytest -m "not browser and not live" -q
+pytest -m "not browser and not live" --cov=src --cov-report=term-missing
+pytest --collect-only -q
+```

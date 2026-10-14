@@ -67,7 +67,8 @@ src/                   — весь код: плоские модули + пак
   api_client/          — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
-stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (242 жёстких + 35 мягких)
+stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий,
+                          `!` — жёсткое слово, без суффикса — мягкое
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset + 4 Tests*)
@@ -112,7 +113,7 @@ python src/main.py vkbot    # VK-бот: резидентный long polling —
 python src/main.py tgbot    # Telegram-бот: резидентный long polling — старт/стоп/статус/помощь из Telegram
 ```
 
-**Авто-расписание Mac (launchd) удалено** — сессии запускаются через VK-бота
+**Авто-расписание сессий отсутствует**: сессии запускаются через VK-бота
 (команда `старт` из сообщения) и вручную.
 
 **Порядок обязательный:** сначала `login` (команда форсирует `headless=False` независимо
@@ -200,9 +201,11 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Критичные инварианты (не ломать)
 
-1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных пауз
-   в коде быть не должно — это осознанная имитация человека. Исключения: `time.sleep(1)`
-   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `api_client/vk_api_client.py`,
+1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных
+   пауз в коде быть не должно — это осознанная имитация человека. Два
+   задокументированных исключения: `time.sleep(1)` при ретрае ошибки 6,
+   `time.sleep(5.0)` при сетевом ретрае в `api_client/vk_api_client.py`.
+   Документированные диапазоны рандомизированы и не требуют исключений:
    `random.uniform(1, 3)` после клика, `random.uniform(55, 65)` в `is_logged_in()`.
 2. **Rate-limit VK API ≈ 3 запроса/сек** (`_min_interval = 0.34`). Любой новый вызов API
    обязан идти через `VKApiClient.call()` — иначе лимиты и обработка ошибок 6/14 теряются.
@@ -490,8 +493,8 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ## 5. Скиллы
 
-В проекте 6 скиллов в `.agents`. Все физически существуют как файлы
-`SKILL.md`. Автозагружаемые вызываются агентом через `skill` tool.
+В проекте 6 скиллов, каждый — файл `SKILL.md` в своём подкаталоге.
+Автозагружаемые вызываются агентом через `skill` tool.
 
 ### Обязательная загрузка (без исключений)
 

@@ -5,7 +5,7 @@
 ![Tests](https://img.shields.io/badge/tests-291%20passed-brightgreen?logo=pytest)
 ![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
-![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20%2B%20Task%20Scheduler-lightgrey)
+![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20(launchd%20%2F%20Task%20Scheduler)-lightgrey)
 ![Last Commit](https://img.shields.io/github/last-commit/mnemchinov/VkAutoLiker)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -101,9 +101,10 @@ VK_AUTO_GROUPS=true                     # собирать посты со ст�
 VK_LLM_API_KEY=ваш_llm_ключ            # только при filter_mode: review или llm
 ```
 
-Полный список всех 47 параметров со значениями по умолчанию — в `.env.example`
-(`VK_LLM_STOP_TOPICS` закомментирован: темы содержат запятые, есть встроенные темы)
-(документация, в репозитории): можно скопировать в `.env` и менять только нужное.
+Полный список параметров со значениями по умолчанию — в разделе
+[«Параметры Settings»](#параметры-settings) этого README: можно скопировать в
+`.env` и менять только нужное. `VK_LLM_STOP_TOPICS` содержит запятые и есть
+встроенные темы — задавать его в `.env` не обязательно.
 
 ### Первичный вход в VK
 
@@ -352,7 +353,9 @@ VK_LLM_SSL_VERIFY=false
 - Человеческое поведение: скролл, движение мыши, паузы «чтения»
 - Друзья/группы — случайная выборка каждую сессию
 - Рандомизация лайков за сессию: `random.randint(min, max)`
-- Защита от двойного запуска — файловая блокировка (`fcntl` на macOS/Linux, `msvcrt` на Windows)
+- Защита от двойного запуска — файловая блокировка (`fcntl` на macOS/Linux,
+  `msvcrt` на Windows): `.autoliker.lock` для сессий, `.autoliker.bot.lock`
+  для VK-бота, `.autoliker.tgbot.lock` для Telegram-бота
 - Retry при сбоях сети в проверке авторизации и API-вызовах
 
 ## Автоматизация

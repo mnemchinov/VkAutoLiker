@@ -3,6 +3,33 @@ name: constitution
 description: Create or amend CONSTITUTION.md — project-wide invariants and governance. Use when formalizing rules or amending principles. Never for feature implementation.
 ---
 
+# Constitution
+
+## TL;DR
+
+Пишем только `CONSTITUTION.md`. Собираем инварианты из `AGENTS.md`, классифицируем
+(MUST / SHOULD / MAY), присваиваем SemVer (MAJOR — удалён MUST, MINOR — новый
+MUST, PATCH — формулировка), пишем по шаблону, отчитываемся: версия + rationale +
+TODO + предлагаемое сообщение коммита.
+
+**Не загружать, если:**
+- Задача — реализовать фичу/фикс — это `implementation-cycle`.
+- Правится README/AGENTS, не CONSTITUTION — это `docs:`-коммит без этого скила.
+- Нужно ревью существующего CONSTITUTION — это `code-review` (раздел «Ревью
+  документации»).
+
+**Маршруты:** входной источник — `AGENTS.md` (инварианты) и `CONSTITUTION.md`
+(если существует). Выходной артефакт — `CONSTITUTION.md`. Валидация — через
+`code-review` по чек-листу документации.
+
+**Источники правды:** `AGENTS.md` (инварианты), `settings.py` (дефолты,
+имена env), `CONSTITUTION.md` (предыдущая версия).
+
+**Версия скила:** 1.1.0 | **Обновлён:** 2026-10-14
+- 1.1.0 — TL;DR, anti-triggers, карта маршрутов, формат вывода, частые ошибки,
+  источники правды, one-liners.
+- 1.0.0 — базовый шаблон и процедура амендмента.
+
 ## User Input
 
 ```text
@@ -101,7 +128,46 @@ Tests MUST NOT hit real network or real browser unless explicitly marked.
 
 - Amendments require an explicit `/skill:constitution` run.
 - Version bumps follow SemVer.
-- Compliance verified by `@python-oop-reviewer`.
+- Compliance verified by `code-review` (раздел «Ревью документации»).
 ```
 
 Adapt article set to actual invariants from AGENTS.md.
+
+## Формат вывода
+
+После записи файла — отчёт ровно в таком виде:
+
+```
+## Отчёт
+- **Версия:** X.Y.Z (bump: MAJOR|MINOR|PATCH)
+- **Rationale:** <почему такой bump>
+- **Файл:** CONSTITUTION.md
+- **TODO (не выполнено):** <список или «нет»>
+- **Предлагаемое сообщение коммита:** docs: <...> (НЕ коммитить без разрешения)
+```
+
+## Частые ошибки агента
+
+- **Писать код/тесты по ходу амендмента.** Scope Guard запрещает — только
+  `CONSTITUTION.md`.
+- **Оставлять `[PLACEHOLDER]` / `<...>` в готовом файле.** Проверять grep-ом.
+- **Присваивать MINOR при удалении MUST.** Удаление — всегда MAJOR.
+- **Копировать инварианты из AGENTS дословно.** Конституция — про governance,
+  не про детали реализации.
+- **Выходить за пределы версии.** Если меняется только формулировка — PATCH,
+  не MINOR.
+
+## Примеры из истории
+
+- `f7dcc1d docs: Конституция 1.1.0 — рабочие соглашения и актуализация
+  инвариантов` — 1.0.0 → 1.1.0, MINOR bump (новая MUST-статья: рабочие
+  соглашения).
+- Формулировочные правки (без изменения смысла) — PATCH.
+
+## Проверка
+
+```bash
+grep -nE "PLACEHOLDER|<[^>]+>" CONSTITUTION.md      # не должно быть
+grep -n "^\*\*Version\*\*" CONSTITUTION.md         # SemVer
+grep -nE "\*\*Ratified\*\*.*[0-9]{4}-[0-9]{2}-[0-9]{2}" CONSTITUTION.md
+```
