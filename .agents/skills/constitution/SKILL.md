@@ -15,7 +15,7 @@ Consider the input before proceeding.
 
 Only write `CONSTITUTION.md`. Do NOT touch source code, tests, or feature artifacts.
 If the input mixes constitution content with feature work — extract feature work into a
-`## Next Actions` section and suggest `/skill:sdd-specify`, but do NOT execute it.
+`## Next Actions` section, but do NOT execute it.
 
 ## Outline
 
@@ -101,7 +101,7 @@ Tests MUST NOT hit real network or real browser unless explicitly marked.
 
 - Amendments require an explicit `/skill:constitution` run.
 - Version bumps follow SemVer.
-- Compliance verified by `/skill:sdd-analyze` and `@python-oop-reviewer`.
+- Compliance verified by `@python-oop-reviewer`.
 ```
 
 Adapt article set to actual invariants from AGENTS.md.
