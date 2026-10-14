@@ -67,7 +67,7 @@ src/                   — весь код: плоские модули + пак
   api_client/          — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
-stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (241 жёстких + 36 мягких)
+stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (242 жёстких + 35 мягких)
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset + 4 Tests*)
@@ -136,7 +136,7 @@ pytest -m "not browser and not live"    # только юнит-тесты, бы
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (87%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
