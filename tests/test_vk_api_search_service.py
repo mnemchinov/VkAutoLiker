@@ -202,3 +202,138 @@ class TestVkApiSearchService:
         posts = svc.get_wall_posts(-123, max_posts=10)
 
         assert posts == []
+
+    def test_extract_attachment_text_video(self, mock_config, mock_logger):
+        """video даёт title и description — клип становится известным."""
+        attachments = [
+            {"type": "video", "video": {"title": "Clip by @viacheslavh", "description": "#орда"}},
+        ]
+        result = VkApiSearchService._extract_attachment_text(attachments)
+        assert result == "Clip by @viacheslavh #орда"
+
+    def test_extract_attachment_text_audio(self, mock_config, mock_logger):
+        attachments = [
+            {"type": "audio", "audio": {"artist": "Vox Luminis", "title": "Remember Not"}},
+        ]
+        result = VkApiSearchService._extract_attachment_text(attachments)
+        assert result == "Vox Luminis Remember Not"
+
+    def test_extract_attachment_text_photo_caption(self, mock_config, mock_logger):
+        """Фото с caption даёт caption; без caption — пусто (неизвестно)."""
+        with_caption = [{"type": "photo", "photo": {"text": "фото с подписью"}}]
+        assert VkApiSearchService._extract_attachment_text(with_caption) == "фото с подписью"
+        without_caption = [{"type": "photo", "photo": {"text": ""}}]
+        assert VkApiSearchService._extract_attachment_text(without_caption) == ""
+
+    def test_extract_attachment_text_poll_link_doc(self, mock_config, mock_logger):
+        attachments = [
+            {"type": "poll", "poll": {"question": "Кто на выпускном?"}},
+            {"type": "link", "link": {"title": "Сайт события"}},
+            {"type": "doc", "doc": {"filename": "билеты.pdf"}},
+        ]
+        result = VkApiSearchService._extract_attachment_text(attachments)
+        assert result == "Кто на выпускном?\nСайт события\nбилеты.pdf"
+
+    def test_extract_attachment_text_unknown_type(self, mock_config, mock_logger):
+        """Неизвестный тип вложения ничего не даёт."""
+        attachments = [
+            {"type": "sticker", "sticker": {"product_id": 1}},
+            {"type": "market", "market": {"id": 2}},
+        ]
+        assert VkApiSearchService._extract_attachment_text(attachments) == ""
+
+    def test_extract_attachment_text_empty(self, mock_config, mock_logger):
+        assert VkApiSearchService._extract_attachment_text([]) == ""
+
+    def test_parse_wall_item_empty_text_video_attachment(self, mock_config, mock_logger):
+        """Пустой текст + video — содержание извлекается, пост становится известным."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -123,
+                    "id": 6231,
+                    "text": "",
+                    "date": 1790845696,
+                    "from_id": -123,
+                    "attachments": [
+                        {
+                            "type": "video",
+                            "video": {"title": "Clip by @x", "description": "#орда"},
+                        },
+                    ],
+                },
+            ]
+        }
+
+        svc = VkApiSearchService(client, mock_logger)
+        posts = svc.get_wall_posts(-123, max_posts=1)
+
+        assert posts[0].text == "Clip by @x #орда"
+
+    def test_parse_wall_item_empty_text_photo_no_caption(self, mock_config, mock_logger):
+        """Пустой текст + фото без caption — содержание неизвестно, текст остаётся пустым."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -123,
+                    "id": 6229,
+                    "text": "",
+                    "date": 1790702672,
+                    "from_id": -123,
+                    "attachments": [{"type": "photo", "photo": {"text": ""}}],
+                },
+            ]
+        }
+
+        svc = VkApiSearchService(client, mock_logger)
+        posts = svc.get_wall_posts(-123, max_posts=1)
+
+        assert posts[0].text == ""
+
+    def test_parse_newsfeed_item_empty_text_video_attachment(self, mock_config, mock_logger):
+        """Обогащение работает и для newsfeed.search (вложения там есть)."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -1,
+                    "id": 1,
+                    "text": "",
+                    "date": 1700000000,
+                    "from_id": 888,
+                    "attachments": [
+                        {"type": "video", "video": {"title": "видео", "description": "описание"}},
+                    ],
+                },
+            ]
+        }
+
+        svc = VkApiSearchService(client, mock_logger)
+        posts = svc.search("test", max_posts=1)
+
+        assert posts[0].text == "видео описание"
+
+    def test_parse_wall_item_text_not_overwritten(self, mock_config, mock_logger):
+        """Ненулевой текст поста не обогащается вложениями."""
+        client = MagicMock()
+        client.call.return_value = {
+            "items": [
+                {
+                    "owner_id": -123,
+                    "id": 1,
+                    "text": "оригинальный текст",
+                    "date": 1700000000,
+                    "from_id": -123,
+                    "attachments": [
+                        {"type": "video", "video": {"title": "видео", "description": ""}},
+                    ],
+                },
+            ]
+        }
+
+        svc = VkApiSearchService(client, mock_logger)
+        posts = svc.get_wall_posts(-123, max_posts=1)
+
+        assert posts[0].text == "оригинальный текст"

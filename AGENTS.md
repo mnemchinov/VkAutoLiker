@@ -21,7 +21,7 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `CollectStage (structural: date + empty → is_processed → стоп-слова: hard → FILTERED / в review → метка на LLM + ранний выход)` →
+`VK API (сбор постов + обогащение пустого текста из вложений)` → `CollectStage (structural: date + unknown → is_processed → стоп-слова: hard → FILTERED / в review → метка на LLM + ранний выход)` →
 `DedupStage (дедупликация)` → `LLMFilterStage (режимы review/llm: review — только помеченные, llm — все посты)` →
 `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
@@ -67,7 +67,8 @@ src/                   — весь код: плоские модули + пак
   api_client/          — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
   migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
-stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий, `!` — жёсткое слово (241 жёстких + 36 мягких)
+stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий,
+                          `!` — жёсткое слово, без суффикса — мягкое
 tests/                 — pytest-тесты, conftest.py с фикстурами
 tests/fixtures/        — статический HTML-фиксут vk_post.html для браузерных тестов
 .idea/runConfigurations/ — PyCharm run-configs (Login/Run/Test/Status/Reset + 4 Tests*)
@@ -112,7 +113,7 @@ python src/main.py vkbot    # VK-бот: резидентный long polling —
 python src/main.py tgbot    # Telegram-бот: резидентный long polling — старт/стоп/статус/помощь из Telegram
 ```
 
-**Авто-расписание Mac (launchd) удалено** — сессии запускаются через VK-бота
+**Авто-расписание сессий отсутствует**: сессии запускаются через VK-бота
 (команда `старт` из сообщения) и вручную.
 
 **Порядок обязательный:** сначала `login` (команда форсирует `headless=False` независимо
@@ -136,7 +137,7 @@ pytest -m "not browser and not live"    # только юнит-тесты, бы
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (86%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (87%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -200,9 +201,11 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ### Критичные инварианты (не ломать)
 
-1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных пауз
-   в коде быть не должно — это осознанная имитация человека. Исключения: `time.sleep(1)`
-   при ретрае ошибки 6, `time.sleep(5.0)` при сетевом ретрае в `api_client/vk_api_client.py`,
+1. **Все задержки рандомизируются через `random.uniform(min, max)`.** Фиксированных
+   пауз в коде быть не должно — это осознанная имитация человека. Два
+   задокументированных исключения: `time.sleep(1)` при ретрае ошибки 6,
+   `time.sleep(5.0)` при сетевом ретрае в `api_client/vk_api_client.py`.
+   Документированные диапазоны рандомизированы и не требуют исключений:
    `random.uniform(1, 3)` после клика, `random.uniform(55, 65)` в `is_logged_in()`.
 2. **Rate-limit VK API ≈ 3 запроса/сек** (`_min_interval = 0.34`). Любой новый вызов API
    обязан идти через `VKApiClient.call()` — иначе лимиты и обработка ошибок 6/14 теряются.
@@ -242,7 +245,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     `is_processed` стоит раньше стоп-слов намеренно: уже помеченный `FILTERED` пост не должен
     повторно доходить до `StopWordsFilter` и снова маркироваться при следующем сборе
     (в т.ч. вторым источником в той же сессии).
-    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back` и пустой текст.
+    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back` и неизвестное содержание (пусто после обогащения из вложений).
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
@@ -435,6 +438,18 @@ pytest -m "not browser and not live"    # базовая страховка по
     потоке. Собственные исходящие Telegram боту не возвращает — эхо-трекинг
     (в отличие от VK `_sent_ids`) не нужен. Сетевой сбой при проверке токена —
     ретрай `random.uniform(5, 15)`, 401 — чистый выход.
+26. **Неизвестное не лайкается.** Пост лайкается только когда его содержание
+    известно. Пост без текста обогащается из метаданных вложений при парсинге
+    (`_extract_attachment_text` в `vk_api_search_service.py`, вызывается из
+    `_parse_wall_item`/`_parse_newsfeed_item`): `video` → title+description,
+    `audio` → artist+title, `photo` → caption, `poll` → question, `link` →
+    title, `doc` → filename. Если после обогащения содержание пусто (пустой
+    пост, фото без caption) — пост неизвестен: `EmptyTextFilter` (structural)
+    отсекает его при сборе **без записи в БД** (нет строки в `processed_posts`,
+    в логах на INFO не появляется) — молчаливое отсутствие поста в БД не баг.
+    Лайк контента, который невозможно оценить, противоречит канону проекта:
+    не «чинить» добавлением флага `VK_ALLOW_EMPTY_TEXT`, удалением фильтра
+    или слепым лайком.
 
 ### Практики тестирования
 
@@ -490,9 +505,8 @@ pytest -m "not browser and not live"    # базовая страховка по
 
 ## 5. Скиллы
 
-В проекте 11 скиллов в `.agents`. Все физически существуют как файлы
-`SKILL.md`. SDD-скиллы вызываются командой `/имя-скилла` в чате; автозагружаемые
-вызываются агентом через `skill` tool.
+В проекте 6 скиллов, каждый — файл `SKILL.md` в своём подкаталоге.
+Автозагружаемые вызываются агентом через `skill` tool.
 
 ### Обязательная загрузка (без исключений)
 
@@ -522,24 +536,6 @@ opencode **не имеет** механизма автозагрузки ски�
 
 ### Ручной вызов (по решению пользователя)
 
-SDD-цикл для новых фич — артефакты в `specs/NNN-slug/`:
-
 | Команда | Назначение |
 |---|---|
 | `/constitution` | Создать или обновить `CONSTITUTION.md` (редко) |
-| `/sdd-specify` | Создать spec новой фичи |
-| `/sdd-clarify` | Уточнить неоднозначности spec |
-| `/sdd-plan` | Технический дизайн |
-| `/sdd-tasks` | Декомпозиция на задачи |
-| `/sdd-analyze` | Кросс-проверка spec/plan/tasks (read-only) |
-
-### Правила SDD
-
-- Не создавать `.specify/` — его нет в этой конфигурации.
-- Конституция проекта — `CONSTITUTION.md` в корне.
-- Активная фича — директория с максимальным NNN в `specs/`, если не указана явно.
-- SDD-цикл предлагать при **нетривиальных** изменениях (новый сервис, изменение контрактов,
-  изменение лимитов или задержек, рефакторинг с ломающими изменениями). Для мелких правок
-  (опечатка, поле в конфиге, один метод) — не предлагать.
-- После `sdd-analyze` — реализация основным агентом, потом `@python-oop-reviewer` для
-  ревью ООП.

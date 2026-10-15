@@ -140,6 +140,17 @@ class AutoLiker:
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
             return
 
+        # Дневной лимит проверяем до jitter и до «Сессия запущена»:
+        # auto-run сверх лимита не должен ждать до 30 минут, а лог о старте
+        # не должен читаться как запуск, который сразу сошёл на лимите
+        if not no_limit:
+            sessions_today, _likes_today = self._sessions_repo.get_daily_stats()
+            if sessions_today >= self._config.sessions_per_day:
+                self._logger.info(
+                    f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.sessions_per_day})"
+                )
+                return
+
         # Jitter для авто-запуска: размывает фиксированные времена запуска
         if not no_limit:
             jitter = random.uniform(0, 1800)
@@ -150,14 +161,6 @@ class AutoLiker:
             self._logger.info("=== Сессия AutoLiker запущена (без учёта лимита) ===")
         else:
             self._logger.info("=== Сессия AutoLiker запущена ===")
-
-        if not no_limit:
-            sessions_today, _likes_today = self._sessions_repo.get_daily_stats()
-            if sessions_today >= self._config.sessions_per_day:
-                self._logger.info(
-                    f"Достигнут дневной лимит сессий ({sessions_today}/{self._config.sessions_per_day})"
-                )
-                return
 
         session_id = self._sessions_repo.start_session(is_auto=not no_limit)
         likes_count = 0

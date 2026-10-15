@@ -66,17 +66,22 @@ class TestRun:
     """Тесты run: лимиты, цикл лайков, обработка ошибок, капча, jitter, burst."""
 
     def test_daily_limit_reached_no_session(self, liker, mock_config):
-        """Дневной лимит сессий достигнут — start_session не вызывается."""
+        """Дневной лимит сессий достигнут — start_session не вызывается.
+
+        Проверка лимита — до jitter: auto-run сверх лимита не должен
+        ждать случайную задержку (до 30 мин), а выйти сразу.
+        """
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._sessions_repo.get_daily_stats = MagicMock(
             return_value=(mock_config.sessions_per_day, 0)
         )
         liker._sessions_repo.start_session = MagicMock()
 
-        with patch("liker.time.sleep"), patch("liker.random.uniform", return_value=0):
+        with patch("liker.time.sleep") as mock_sleep, patch("liker.random.uniform", return_value=0):
             liker.run()
 
         liker._sessions_repo.start_session.assert_not_called()
+        mock_sleep.assert_not_called()
 
     def test_no_limit_skips_daily_limit_check(self, liker, mock_config):
         """no_limit=True — дневной лимит не проверяется, сессия создаётся."""
@@ -314,12 +319,17 @@ class TestRun:
         liker._posts_repo.mark_processed.assert_not_called()
 
     def test_jitter_in_auto_mode(self, liker, mock_config):
-        """Авто-запуск (no_limit=False) — jitter после проверки авторизации."""
+        """Авто-запуск (no_limit=False) — jitter после проверки авторизации.
+
+        Дневной лимит не достигнут (0 < sessions_per_day), поэтому до
+        jitter доходит.
+        """
         liker._browser.is_logged_in = MagicMock(return_value=True)
-        liker._sessions_repo.get_daily_stats = MagicMock(
-            return_value=(mock_config.sessions_per_day, 0)
-        )
-        liker._sessions_repo.start_session = MagicMock()
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
 
         with (
             patch("liker.time.sleep") as mock_sleep,

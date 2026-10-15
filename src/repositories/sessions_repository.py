@@ -153,17 +153,18 @@ class SessionsRepository:
         return SessionStats(sessions=row[0], likes=row[1])
 
     def get_running_session(self) -> LastSession | None:
-        """Возвращает идущую сессию за сегодня (ended_at IS NULL) или None.
+        """Возвращает идущую сессию (ended_at IS NULL) или None.
 
+        Без today-фильтра: сессия, пересёкшая полночь, на новом дне всё ещё
+        идёт — фильтром её не видно. Одновременно идущая сессия одна
+        (файловая блокировка), LIMIT 1 — формальность.
         Для промежуточного статуса: время старта и текущее число лайков
         (обновляется в update_session_likes после каждого лайка).
         """
-        today = date.today().isoformat()
         cursor = self._db.conn.execute(
             "SELECT id, COALESCE(likes_count, 0), 0, started_at "
-            "FROM sessions WHERE session_date = ? AND ended_at IS NULL "
-            "ORDER BY id DESC LIMIT 1",
-            (today,),
+            "FROM sessions WHERE ended_at IS NULL "
+            "ORDER BY id DESC LIMIT 1"
         )
         row = cursor.fetchone()
         if row is None:
@@ -171,17 +172,17 @@ class SessionsRepository:
         return LastSession(id=row[0], likes=row[1], ended_at=0, started_at=row[3])
 
     def get_last_session(self) -> LastSession | None:
-        """Возвращает последнюю завершённую сессию за сегодня или None.
+        """Возвращает последнюю завершённую сессию или None.
 
+        Без today-фильтра: сессия, завершившаяся за полночь, на новом дне
+        не найдётся, и отчёт бота ошибится «Сессия не началась».
         Идущие сессии (ended_at IS NULL) не считаются — для них есть
         get_running_session. Используется в отчёте бота после завершения.
         """
-        today = date.today().isoformat()
         cursor = self._db.conn.execute(
             "SELECT id, COALESCE(likes_count, 0), ended_at, started_at "
-            "FROM sessions WHERE session_date = ? AND ended_at IS NOT NULL "
-            "ORDER BY id DESC LIMIT 1",
-            (today,),
+            "FROM sessions WHERE ended_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1"
         )
         row = cursor.fetchone()
         if row is None:

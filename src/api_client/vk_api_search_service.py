@@ -173,16 +173,48 @@ class VkApiSearchService:
         return posts[:max_posts]
 
     @staticmethod
+    def _extract_attachment_text(attachments: list[dict]) -> str:
+        """Извлекает содержание поста из вложений для пустотекстовых постов.
+
+        Канон «неизвестное не лайкается»: пост без текста — неизвестен.
+        Вложения несут метаданные, делающие пост известным: video — title
+        и description, audio — artist и title, photo — caption, poll —
+        question, link — title, doc — filename. Неизвестные типы и
+        вложения без метаданных ничего не дают: фото без caption и пустой
+        пост остаются неизвестными и отсеиваются EmptyTextFilter.
+        """
+        parts: list[str] = []
+        for attachment in attachments:
+            kind = attachment.get("type", "")
+            obj = attachment.get(kind) or {}
+            if kind == "video":
+                parts.append(f"{obj.get('title', '')} {obj.get('description', '')}".strip())
+            elif kind == "audio":
+                parts.append(f"{obj.get('artist', '')} {obj.get('title', '')}".strip())
+            elif kind == "photo":
+                parts.append(obj.get("text", ""))
+            elif kind == "poll":
+                parts.append(obj.get("question", ""))
+            elif kind == "link":
+                parts.append(obj.get("title", ""))
+            elif kind == "doc":
+                parts.append(obj.get("filename", ""))
+        return "\n".join(p for p in parts if p)
+
+    @staticmethod
     def _parse_newsfeed_item(item: dict) -> Post | None:
         """Парсит элемент из newsfeed.search в Post. None, если нет owner_id/item_id."""
         owner_id = item.get("owner_id") or item.get("source_id", 0)
         item_id = item.get("id") or item.get("post_id", 0)
         if not owner_id or not item_id:
             return None
+        text = item.get("text", "")
+        if not text.strip():
+            text = VkApiSearchService._extract_attachment_text(item.get("attachments") or [])
         return Post(
             owner_id=owner_id,
             item_id=item_id,
-            text=item.get("text", ""),
+            text=text,
             date=item.get("date", 0),
             url=build_post_url(owner_id, item_id),
             from_id=item.get("from_id", 0),
@@ -195,10 +227,13 @@ class VkApiSearchService:
         item_id = item.get("id", 0)
         if not owner_id or not item_id:
             return None
+        text = item.get("text", "")
+        if not text.strip():
+            text = VkApiSearchService._extract_attachment_text(item.get("attachments") or [])
         return Post(
             owner_id=owner_id,
             item_id=item_id,
-            text=item.get("text", ""),
+            text=text,
             date=item.get("date", 0),
             url=build_post_url(owner_id, item_id),
             from_id=item.get("from_id", 0),

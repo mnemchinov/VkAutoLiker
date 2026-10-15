@@ -290,18 +290,6 @@ class VKBrowser:
         """Возвращает первый элемент по CSS-селектору."""
         return self.driver.find_element(By.CSS_SELECTOR, css_selector)
 
-    def click(self, css_selector: str) -> bool:
-        """Кликает по элементу по CSS-селектору с прокруткой. True, если успешно."""
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
-            self._random_sleep(0.5, 1.5)
-            el.click()
-            return True
-        except Exception as e:
-            self._logger.debug(f"Клик не удался по '{css_selector}': {e}")
-            return False
-
     def click_element(self, element: WebElement) -> bool:
         """Кликает по переданному элементу через ActionChains с движением мыши.
 
