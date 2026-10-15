@@ -41,8 +41,12 @@ def build_post_url(owner_id: int, item_id: int) -> str:
 
 @dataclass
 class Post:
-    """Пост VK: идентификаторы, текст, дата (unix timestamp) и URL.
+    """Пост VK: идентификаторы, содержание, дата (unix timestamp) и URL.
 
+    text — содержание поста: текст, а при пустом тексте — извлечённое из
+    метаданных вложений (video/audio/photo/poll/link/doc). Пусто, если
+    содержание неизвестно — такой пост не лайкается (канон «неизвестное
+    не лайкается», инвариант #26 в AGENTS.md).
     review / review_words — метка стоп-слов для LLM-арбитража (режим review):
     устанавливается CollectStage, в БД не сохраняется.
     """

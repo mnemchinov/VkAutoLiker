@@ -21,7 +21,7 @@
 ставятся только через браузер. Вся логика поиска и фильтрации — через API.
 
 **Цепочка данных:**
-`VK API (сбор постов)` → `CollectStage (structural: date + empty → is_processed → стоп-слова: hard → FILTERED / в review → метка на LLM + ранний выход)` →
+`VK API (сбор постов + обогащение пустого текста из вложений)` → `CollectStage (structural: date + unknown → is_processed → стоп-слова: hard → FILTERED / в review → метка на LLM + ранний выход)` →
 `DedupStage (дедупликация)` → `LLMFilterStage (режимы review/llm: review — только помеченные, llm — все посты)` →
 `Selenium (навигация → «чтение» → клик)` → `проверка aria-label` → `запись в SQLite`
 
@@ -245,7 +245,7 @@ pytest -m "not browser and not live"    # базовая страховка по
     `is_processed` стоит раньше стоп-слов намеренно: уже помеченный `FILTERED` пост не должен
     повторно доходить до `StopWordsFilter` и снова маркироваться при следующем сборе
     (в т.ч. вторым источником в той же сессии).
-    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back` и пустой текст.
+    `FilterChain` не зависит от `PostsRepository` — проверяет только `days_back` и неизвестное содержание (пусто после обогащения из вложений).
 10. **Друзья и группы перемешиваются, итерируются до early-exit или safety-капа.**
     `get_friends()`/`get_groups()` всегда запрашивают `count=1000` (один API-вызов),
     возвращают полный список; `CollectStage` делает `random.shuffle()` и итерирует по всем,
@@ -438,6 +438,18 @@ pytest -m "not browser and not live"    # базовая страховка по
     потоке. Собственные исходящие Telegram боту не возвращает — эхо-трекинг
     (в отличие от VK `_sent_ids`) не нужен. Сетевой сбой при проверке токена —
     ретрай `random.uniform(5, 15)`, 401 — чистый выход.
+26. **Неизвестное не лайкается.** Пост лайкается только когда его содержание
+    известно. Пост без текста обогащается из метаданных вложений при парсинге
+    (`_extract_attachment_text` в `vk_api_search_service.py`, вызывается из
+    `_parse_wall_item`/`_parse_newsfeed_item`): `video` → title+description,
+    `audio` → artist+title, `photo` → caption, `poll` → question, `link` →
+    title, `doc` → filename. Если после обогащения содержание пусто (пустой
+    пост, фото без caption) — пост неизвестен: `EmptyTextFilter` (structural)
+    отсекает его при сборе **без записи в БД** (нет строки в `processed_posts`,
+    в логах на INFO не появляется) — молчаливое отсутствие поста в БД не баг.
+    Лайк контента, который невозможно оценить, противоречит канону проекта:
+    не «чинить» добавлением флага `VK_ALLOW_EMPTY_TEXT`, удалением фильтра
+    или слепым лайком.
 
 ### Практики тестирования
 
