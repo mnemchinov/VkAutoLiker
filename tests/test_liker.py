@@ -66,10 +66,11 @@ class TestRun:
     """Тесты run: лимиты, цикл лайков, обработка ошибок, капча, jitter, burst."""
 
     def test_daily_limit_reached_no_session(self, liker, mock_config):
-        """Дневной лимит сессий достигнут — start_session не вызывается.
+        """Дневной лимит сессий достигнут — start_session и браузер не вызываются.
 
-        Проверка лимита — до jitter: auto-run сверх лимита не должен
-        ждать случайную задержку (до 30 мин), а выйти сразу.
+        Проверка лимита — до строки сессии, до браузера и до jitter:
+        auto-run сверх лимита не должен ни запускать Chrome, ни ждать
+        случайную задержку (до 30 мин), а выйти сразу.
         """
         liker._browser.is_logged_in = MagicMock(return_value=True)
         liker._sessions_repo.get_daily_stats = MagicMock(
@@ -81,6 +82,7 @@ class TestRun:
             liker.run()
 
         liker._sessions_repo.start_session.assert_not_called()
+        liker._browser.start.assert_not_called()
         mock_sleep.assert_not_called()
 
     def test_no_limit_skips_daily_limit_check(self, liker, mock_config):
@@ -123,6 +125,43 @@ class TestRun:
             liker.run(no_limit=True)
 
         assert order == ["close", "start"]
+
+    def test_session_row_created_before_browser_start(self, liker, mock_config):
+        """Строка сессии в БД создаётся до запуска браузера.
+
+        Регрессия: «старт» из бота + сразу «статус» — статус читает БД,
+        а строка появлялась только после старт-фазы браузера (1-1,5 мин).
+        """
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 0))
+        liker._sessions_repo.end_session = MagicMock()
+        liker._pipeline.run = MagicMock(return_value=PipelineContext(config=mock_config, posts=[]))
+
+        order: list[str] = []
+        liker._sessions_repo.start_session = MagicMock(
+            side_effect=lambda **kwargs: (order.append("start_session"), 1)[1]
+        )
+        liker._browser.start = MagicMock(side_effect=lambda: order.append("browser_start"))
+
+        with patch("liker.time.sleep"):
+            liker.run(no_limit=True)
+
+        assert order == ["start_session", "browser_start"]
+
+    def test_login_failure_closes_session(self, liker, mock_config):
+        """Нет авторизации — созданная до браузера сессия закрывается с 0 лайков.
+
+        Без end_session строка висела бы зомби (ended_at NULL) до следующего
+        «статуса» или запуска.
+        """
+        liker._browser.is_logged_in = MagicMock(return_value=False)
+        liker._sessions_repo.start_session = MagicMock(return_value=7)
+        liker._sessions_repo.end_session = MagicMock()
+
+        with patch("liker.time.sleep"):
+            liker.run(no_limit=True)
+
+        liker._sessions_repo.end_session.assert_called_once_with(7, 0)
 
     def test_like_success_increments_count(self, liker, mock_config):
         """Успешный лайк → mark_processed, likes_count растёт."""

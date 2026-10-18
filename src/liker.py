@@ -124,6 +124,9 @@ class AutoLiker:
         сессия записывается с is_auto=False и не расходует дневной лимит.
         no_limit=False — авто-запуск: дневной лимит проверяется и
         сессия записывается с is_auto=True.
+        Порядок: лимит-чек → строка сессии в БД → старт браузера →
+        проверка авторизации → jitter: сессия видна в «статусе» сразу
+        после запуска, а не через 1-1,5 мин старт-фазы.
         """
         # Флаг остановки снимается в самом начале run() (до старта браузера):
         # позже (после start_session) свежий стоп, нажатый сразу после
@@ -135,14 +138,10 @@ class AutoLiker:
         closed = self._sessions_repo.close_zombie_sessions()
         if closed:
             self._logger.info(f"Зомби-сессий закрыто: {closed}")
-        self._browser.start()
-        if not self._browser.is_logged_in():
-            self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
-            return
 
-        # Дневной лимит проверяем до jitter и до «Сессия запущена»:
-        # auto-run сверх лимита не должен ждать до 30 минут, а лог о старте
-        # не должен читаться как запуск, который сразу сошёл на лимите
+        # Дневной лимит проверяем до создания строки сессии: сессия не
+        # засчитывает сама себя, а auto-run сверх лимита выходит сразу —
+        # без запуска Chrome, проверки авторизации и jitter
         if not no_limit:
             sessions_today, _likes_today = self._sessions_repo.get_daily_stats()
             if sessions_today >= self._config.sessions_per_day:
@@ -151,18 +150,26 @@ class AutoLiker:
                 )
                 return
 
-        # Jitter для авто-запуска: размывает фиксированные времена запуска
-        if not no_limit:
-            jitter = random.uniform(0, 1800)
-            self._logger.info(f"Случайная задержка перед стартом: {jitter:.0f} сек")
-            time.sleep(jitter)
-
+        # Строка сессии создаётся до запуска браузера: старт Chrome и
+        # проверка авторизации занимают 1-1,5 мин, и «статус» из бота,
+        # нажатый сразу после «старт», должен видеть идущую сессию
+        session_id = self._sessions_repo.start_session(is_auto=not no_limit)
         if no_limit:
             self._logger.info("=== Сессия AutoLiker запущена (без учёта лимита) ===")
         else:
             self._logger.info("=== Сессия AutoLiker запущена ===")
 
-        session_id = self._sessions_repo.start_session(is_auto=not no_limit)
+        self._browser.start()
+        if not self._browser.is_logged_in():
+            self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
+            self._sessions_repo.end_session(session_id, 0)
+            return
+
+        # Jitter для авто-запуска: размывает фиксированные времена запуска
+        if not no_limit:
+            jitter = random.uniform(0, 1800)
+            self._logger.info(f"Случайная задержка перед стартом: {jitter:.0f} сек")
+            time.sleep(jitter)
         likes_count = 0
         already_liked_count = 0
         captcha_streak = 0

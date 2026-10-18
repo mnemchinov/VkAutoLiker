@@ -133,7 +133,7 @@ python src/main.py tgbot    # Telegram-бот: резидентный long polli
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (291 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (303 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -147,7 +147,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (87%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 291 тестов, маркер не нужен.
+- Юнит-тесты на моках — 303 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -237,7 +237,13 @@ pytest -m "not browser and not live"    # базовая страховка по
    сессия записывается с `is_auto=0`, `get_daily_stats()` считает только `is_auto=1`.
    `finally` всегда закрывает сессию в БД, включая `KeyboardInterrupt`.
    **Jitter выполняется после проверки авторизации:** `is_logged_in()` — до `random.uniform(0, 1800)`,
-   чтобы истёкшая сессия не ждала до 30 минут зря.
+    чтобы истёкшая сессия не ждала до 30 минут зря.
+    **Порядок старта в `run()`:** лимит-чек → `start_session()` → лог «Сессия запущена» →
+    `browser.start()` → `is_logged_in()` → jitter. Строка сессии создаётся **до** запуска
+    браузера: «статус» из бота (читает только БД) видит идущую сессию сразу после «старт»,
+    а не через 1–1,5 мин старт-фазы. Лимит-чек — до строки, чтобы сессия не засчитывала
+    сама себя; auto-run сверх лимита выходит без запуска Chrome. Сбой авторизации после
+    `start_session` закрывает сессию `end_session(id, 0)` — строка не висит зомби.
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
     в `stage_collect.py` проверяет `PostsRepository.is_processed()` **до** проверки стоп-слов
     и до добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
