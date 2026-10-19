@@ -93,7 +93,7 @@ class CollectStage:
                             self._posts_repo.mark_processed(
                                 p.owner_id, p.item_id, PostStatus.FILTERED
                             )
-                            ctx.funnel.filtered += 1
+                            ctx.funnel.stop_words_filtered += 1
                             continue
                 if p.from_id == self._config.user_id:
                     ctx.funnel.filtered += 1

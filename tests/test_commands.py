@@ -58,6 +58,7 @@ class TestCommands:
         report = {
             "collected": 214,
             "filtered": 16,
+            "stop_words_filtered": 4,
             "duplicates": 12,
             "llm_filtered": 0,
             "llm_timeout": 0,
@@ -73,10 +74,12 @@ class TestCommands:
         assert "Последняя: сегодня " in text
         assert "18 лайков" in text
         assert "стоп: лимит лайков сессии" in text
+        # «filtered» (структурный шум) в строку не попадает — только стоп-слова
         assert (
-            "Постов: 214, 16 отсеяно фильтром, 12 дубликатов, 3 уже были с лайком, 2 не удалось"
+            "Постов: 214, 4 отсеяно стоп-словами, 12 дубликатов, 3 уже были с лайком, 2 не удалось"
             in text
         )
+        assert "отсеяно фильтром" not in text
 
     def test_status_last_session_without_report_legacy(self, mock_config, mock_logger, tmp_path):
         """Сессия без отчёта (старая схема) — строка «Последняя» без «Постов» и «стоп»."""
@@ -322,6 +325,7 @@ class TestCommands:
             report={
                 "collected": 12,
                 "filtered": 5,
+                "stop_words_filtered": 2,
                 "duplicates": 1,
                 "llm_filtered": 0,
                 "llm_timeout": 0,
@@ -341,7 +345,8 @@ class TestCommands:
         text = send.call_args[0][0]
         assert text.startswith("Сессия завершена: 7 лайков (окончание ")
         assert ", стоп: посты закончились" in text
-        assert "Постов: 12, 5 отсеяно фильтром, 1 дубликатов" in text
+        assert "Постов: 12, 2 отсеяно стоп-словами, 1 дубликатов" in text
+        assert "отсеяно фильтром" not in text
 
     def test_report_completion_error_code(self, mock_config, mock_logger, tmp_path):
         """rc != 0 — отчёт об ошибке с кодом."""

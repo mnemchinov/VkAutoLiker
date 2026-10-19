@@ -247,8 +247,11 @@ pytest -m "not browser and not live"    # базовая страховка по
     сама себя; auto-run сверх лимита выходит без запуска Chrome. Сбой авторизации после
     `start_session` закрывает сессию `end_session(id, 0)` — строка не висит зомби.
     **Отчёт сессии** (`sessions.report`, m005, JSON): `SessionFunnel` в `stages/pipeline.py`
-    — `collected/filtered` (CollectStage), `duplicates` (DedupStage), `llm_filtered/llm_timeout`
-    (LLMFilterStage), `liked/already_liked/failed` + `reason` (цикл лайков). `reason` — причина
+    — `collected/filtered/stop_words_filtered` (CollectStage; `filtered` — структурный
+    отсев: дата + неизвестное + свои посты, в строку статуса не выходит; `stop_words_filtered`
+    — жёсткие стоп-слова, в строке — «отсеяно стоп-словами»), `duplicates` (DedupStage),
+    `llm_filtered/llm_timeout` (LLMFilterStage), `liked/already_liked/failed` + `reason`
+    (цикл лайков). `reason` — причина
     остановки («лимит лайков сессии» / «посты закончились» / «стоп по команде» / «капча — стоп» /
     «крах браузера» / «нет авторизации» / «капча от API при сборе» /
     «прервано пользователем» / «постов для лайка не нашлось»).

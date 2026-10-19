@@ -105,7 +105,7 @@ class Commands:
         """Формат последней завершённой сессии.
 
         Первая строка — дата, время, длительность, лайки, причина остановки
-        (из отчёта сессии). Вторая строка — отчёт о постах: собрано/отсеяно/
+        (из отчёта сессии). Вторая строка — отчёт о постах: собрано/стоп-слова/
         дубликаты/LLM/уже лайкнуты/провалы. Сессии без отчёта (старая схема)
         — одна строка, как раньше.
         """
@@ -149,10 +149,10 @@ class Commands:
 
     @staticmethod
     def _format_posts_line(report: dict) -> str:
-        """Строка отчёта о постах: собрано/отсеяно/дубликаты/LLM/уже лайкнуты/провалы."""
+        """Строка отчёта о постах: собрано/стоп-слова/дубликаты/LLM/уже лайкнуты/провалы."""
         parts = [f"Постов: {report.get('collected', 0)}"]
-        if report.get("filtered"):
-            parts.append(f"{report['filtered']} отсеяно фильтром")
+        if report.get("stop_words_filtered"):
+            parts.append(f"{report['stop_words_filtered']} отсеяно стоп-словами")
         if report.get("duplicates"):
             parts.append(f"{report['duplicates']} дубликатов")
         if report.get("llm_filtered"):

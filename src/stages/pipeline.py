@@ -17,13 +17,15 @@ class SessionFunnel:
     """Отчёт о сессии: счётчики постов по этапам и причина остановки.
 
     Конвейерные стадии инкрементят свои счётчики (collected/filtered/
-    duplicates/llm_*), цикл лайков в liker.run() — liked/already_liked/
+    stop_words_filtered/duplicates/llm_*), цикл лайков в liker.run() —
+    liked/already_liked/
     failed и reason. Сериализуется в JSON и хранится в sessions.report —
     «статус» в боте показывает его второй строкой.
     """
 
     collected: int = 0
     filtered: int = 0
+    stop_words_filtered: int = 0
     duplicates: int = 0
     llm_filtered: int = 0
     llm_timeout: int = 0

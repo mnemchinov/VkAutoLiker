@@ -149,7 +149,8 @@ class TestCollectStage:
         assert (1, 2) not in result_ids
         collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
         assert result.funnel.collected == 1
-        assert result.funnel.filtered == 1
+        assert result.funnel.stop_words_filtered == 1
+        assert result.funnel.filtered == 0
 
     def test_soft_stop_word_passes(self, collect_stage, mock_config):
         """Мягкое стоп-слово (stop_words-режим) — пост проходит, без маркировки."""
