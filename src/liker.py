@@ -19,7 +19,6 @@ from api_client import CaptchaError, VKApiClient, VkApiSearchService
 from browser import BrowserLikesService, LikeResult, VKBrowser
 from database import Database
 from logger import AppLogger
-from migrations import run_migrations
 from post import Post, PostStatus
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
@@ -52,7 +51,6 @@ class AutoLiker:
         self._browser = VKBrowser(config, logger)
         self._likes_service = BrowserLikesService(self._browser, config, logger)
         self._db = Database(config)
-        run_migrations(self._db.conn)
         self._posts_repo = PostsRepository(self._db)
         self._sessions_repo = SessionsRepository(self._db)
         self._walls_repo = ClosedWallsRepository(self._db, config)

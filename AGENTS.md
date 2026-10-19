@@ -60,7 +60,9 @@ src/                   — весь код: плоские модули + пак
   settings.py          — Settings(BaseSettings): плоский pydantic-settings, env vars + .env + дефолты
   logger.py            — AppLogger (обёртка над logging)
   post.py              — dataclass Post (+ review/review_words), PostStatus, PostReview
-  database.py          — Database: подключение SQLite
+  database.py          — Database: подключение SQLite; миграции применяются
+                          автоматически в __init__ (любое подключение — боты, статус —
+                          получает актуальную схему; раньше мигрировал только AutoLiker)
   browser/             — VKBrowser (Selenium + антидетект), BrowserLikesService (клик + верификация)
   post_filter/         — protocol, DateFilter, EmptyTextFilter, StopWordsFilter (matched/StopMatch), LLMTopicFilter, FilterChain
   stages/              — Pipeline + PipelineContext; CollectStage (6 источников, ранний выход), DedupStage, LLMFilterStage (review/llm)

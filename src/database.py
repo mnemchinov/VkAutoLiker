@@ -1,11 +1,13 @@
 """Подключение к SQLite: обёртка над sqlite3.Connection.
 
-Database инкапсулирует sqlite3.Connection. Миграции выполняются отдельно
-через migrations.run_migrations().
+Database инкапсулирует sqlite3.Connection. Миграции выполняются в __init__ —
+любое подключение сразу получает актуальную схему (идемпотентно через
+PRAGMA user_version), включая демоны ботов, которые не создают AutoLiker.
 """
 
 import sqlite3
 
+from migrations import run_migrations
 from settings import Settings
 
 
@@ -14,15 +16,15 @@ class Database:
 
     Использование:
         db = Database(config)
-        run_migrations(db.conn)
         db.conn.execute("INSERT ...")
         db.commit()
         db.close()
     """
 
     def __init__(self, config: Settings):
-        """Создаёт подключение к SQLite-базе по пути config.db_path."""
+        """Создаёт подключение к SQLite-базе по пути config.db_path и применяет миграции."""
         self._conn: sqlite3.Connection = sqlite3.connect(config.db_path)
+        run_migrations(self._conn)
 
     @property
     def conn(self) -> sqlite3.Connection:

@@ -1,7 +1,7 @@
 """Unit-тесты подключения Database.
 
-Database — тонкая обёртка над sqlite3.Connection.
-Миграции тестируются отдельно в test_migrations.py.
+Database — тонкая обёртка над sqlite3.Connection, миграции применяются
+автоматически в __init__ (полные тесты миграций — в test_migrations.py).
 """
 
 import sqlite3
@@ -39,3 +39,17 @@ class TestDatabase:
         db.close()
         assert row is not None
         assert row[0] == 42
+
+    def test_init_applies_migrations(self, mock_config, tmp_path):
+        """Соединение сразу видит актуальную схему (м005 — колонка report).
+
+        Регрессия: боты создавали Database без AutoLiker и не применяли
+        миграции — «статус» падал на no such column: report.
+        """
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        try:
+            cols = {row[1] for row in db.conn.execute("PRAGMA table_info(sessions)")}
+            assert "report" in cols
+        finally:
+            db.close()
