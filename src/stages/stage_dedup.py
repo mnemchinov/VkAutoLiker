@@ -17,5 +17,6 @@ class DedupStage:
             key = (p.owner_id, p.item_id)
             if key not in unique:
                 unique[key] = p
+        ctx.funnel.duplicates = len(ctx.posts) - len(unique)
         ctx.posts = list(unique.values())
         return ctx

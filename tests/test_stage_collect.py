@@ -63,6 +63,8 @@ class TestCollectStage:
         result = collect_stage.process(ctx)
 
         assert len(result.posts) == 20
+        assert result.funnel.collected == 20
+        assert result.funnel.filtered == 0
         collect_stage._search.resolve_screen_name.assert_not_called()
         collect_stage._search.get_friends.assert_not_called()
 
@@ -121,6 +123,10 @@ class TestCollectStage:
         assert (1, 2) not in result_ids
         assert (1, 1) in result_ids
         assert (1, 3) in result_ids
+        # is_processed — не «отсеяно фильтром»: счётчик фильтров не растёт.
+        # 4 — посты пришли с двух запросов (тестовый конфиг), дедуп — следующая стадия
+        assert result.funnel.filtered == 0
+        assert result.funnel.collected == 4
 
     def test_hard_stop_word_filters_post(self, collect_stage, mock_config):
         """Жёсткое стоп-слово (stop_words-режим) → mark_processed(FILTERED), не повторится."""
@@ -142,6 +148,9 @@ class TestCollectStage:
         assert (1, 1) in result_ids
         assert (1, 2) not in result_ids
         collect_stage._posts_repo.mark_processed.assert_called_once_with(1, 2, PostStatus.FILTERED)
+        assert result.funnel.collected == 1
+        assert result.funnel.stop_words_filtered == 1
+        assert result.funnel.filtered == 0
 
     def test_soft_stop_word_passes(self, collect_stage, mock_config):
         """Мягкое стоп-слово (stop_words-режим) — пост проходит, без маркировки."""

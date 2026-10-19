@@ -34,6 +34,7 @@ class TestDedupStage:
         keys = [(p.owner_id, p.item_id) for p in result.posts]
         assert len(keys) == len(set(keys))
         assert sorted(keys) == [(1, 1), (1, 2), (1, 3)]
+        assert result.funnel.duplicates == 2
 
     def test_preserves_order(self):
         """Порядок первого вхождения сохраняется."""
@@ -44,6 +45,16 @@ class TestDedupStage:
 
         keys = [(p.owner_id, p.item_id) for p in result.posts]
         assert keys == [(3, 1), (2, 1), (1, 1)]
+
+    def test_no_duplicates_zero_count(self):
+        """Без дубликатов счётчик дубликатов в отчёте нулевой."""
+        posts = [_make_post(1, 1), _make_post(1, 2)]
+        ctx = PipelineContext(config=MagicMock(), posts=posts)
+
+        result = DedupStage().process(ctx)
+
+        assert result.funnel.duplicates == 0
+        assert len(result.posts) == 2
 
     def test_empty_list_passes_through(self):
         """Пустой список проходит без изменений."""

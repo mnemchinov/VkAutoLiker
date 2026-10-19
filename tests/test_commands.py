@@ -4,9 +4,11 @@
 отчёты о завершении — прямые вызовы _report_completion на мок-процессе.
 """
 
+import re
 import subprocess
 import sys
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 from commands import Commands
@@ -47,6 +49,119 @@ class TestCommands:
         assert "Сегодня: 2 запуска, 15 лайков" in text
         assert "Последняя: " in text
         assert "Сессия идёт" not in text
+
+    def test_status_last_session_with_report(self, mock_config, mock_logger, tmp_path):
+        """«Последняя» — время, длительность, лайки, причина + строка отчёта о постах."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        report = {
+            "collected": 214,
+            "filtered": 16,
+            "stop_words_filtered": 4,
+            "duplicates": 12,
+            "llm_filtered": 0,
+            "llm_timeout": 0,
+            "liked": 18,
+            "already_liked": 3,
+            "failed": 2,
+            "reason": "лимит лайков сессии",
+        }
+        repo.end_session(sid, likes_count=18, report=report)
+
+        text = commands.status()
+
+        assert "Последняя: сегодня " in text
+        assert "18 лайков" in text
+        assert "стоп: лимит лайков сессии" in text
+        # «filtered» (структурный шум) в строку не попадает — только стоп-слова
+        assert (
+            "Постов: 214, 4 отсеяно стоп-словами, 12 дубликатов, 3 уже были с лайком, 2 не удалось"
+            in text
+        )
+        assert "отсеяно фильтром" not in text
+
+    def test_status_last_session_without_report_legacy(self, mock_config, mock_logger, tmp_path):
+        """Сессия без отчёта (старая схема) — строка «Последняя» без «Постов» и «стоп»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        repo.end_session(sid, likes_count=5)
+
+        text = commands.status()
+
+        assert "Последняя: сегодня " in text
+        assert "Постов:" not in text
+        assert "стоп:" not in text
+
+    def test_status_last_session_old_date_shows_day_month(self, mock_config, mock_logger, tmp_path):
+        """Сессия не за сегодня — дата в формате ДД.ММ вместо «сегодня»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        repo.end_session(sid, likes_count=5)
+        past = int(time.time()) - 86400 * 2
+        commands._db.conn.execute(
+            "UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?",
+            (past, past + 600, sid),
+        )
+        commands._db.conn.commit()
+
+        text = commands.status()
+        last_line = next(line for line in text.splitlines() if line.startswith("Последняя"))
+
+        assert "сегодня" not in last_line
+        assert re.search(r"Последняя: \d{2}\.\d{2} ", last_line)
+        assert "(10 мин)" in last_line
+
+    def test_status_report_llm_parts_and_hours_duration(self, mock_config, mock_logger, tmp_path):
+        """Отчёт с LLM-счётчиками — части в строке; длительность >1 ч — «1 ч 30 мин»."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        report = {
+            "collected": 50,
+            "filtered": 0,
+            "duplicates": 0,
+            "llm_filtered": 2,
+            "llm_timeout": 1,
+            "liked": 47,
+            "already_liked": 0,
+            "failed": 0,
+            "reason": "посты закончились",
+        }
+        repo.end_session(sid, likes_count=47, report=report)
+        past = int(time.time()) - 86400 * 3
+        commands._db.conn.execute(
+            "UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?",
+            (past, past + 5400, sid),
+        )
+        commands._db.conn.commit()
+
+        text = commands.status()
+        last_line = next(line for line in text.splitlines() if line.startswith("Последняя"))
+
+        assert "(1 ч 30 мин)" in last_line
+        assert "Постов: 50, 2 отсеяно LLM, 1 пропущено LLM (таймаут)" in text
+
+    def test_status_report_broken_json_falls_back(self, mock_config, mock_logger, tmp_path):
+        """Битый JSON в sessions.report — только строка «Последняя», без падения."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        repo.end_session(
+            sid,
+            likes_count=5,
+            report={"collected": 10, "reason": "посты закончились"},
+        )
+        commands._db.conn.execute("UPDATE sessions SET report = 'не json' WHERE id = ?", (sid,))
+        commands._db.conn.commit()
+
+        text = commands.status()
+
+        assert "Последняя: " in text
+        assert "Постов:" not in text
+        assert "стоп:" not in text
 
     def test_status_shows_running_session(self, mock_config, mock_logger, tmp_path):
         """status() с идущей сессией — промежуточная строка вместо «Последняя»."""
@@ -194,6 +309,44 @@ class TestCommands:
         send.assert_called_once()
         text = send.call_args[0][0]
         assert text.startswith("Сессия завершена: 7 лайков (окончание ")
+        # Без отчёта (end_session без report) — вторая строка не добавляется
+        assert "Постов:" not in text
+
+    def test_report_completion_with_report(self, mock_config, mock_logger, tmp_path):
+        """Отчёт сессии — причина остановки и строка постов в том же сообщении."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        old_sid = repo.start_session(is_auto=False)
+        repo.end_session(old_sid, likes_count=1)
+        new_sid = repo.start_session(is_auto=False)
+        repo.end_session(
+            new_sid,
+            likes_count=7,
+            report={
+                "collected": 12,
+                "filtered": 5,
+                "stop_words_filtered": 2,
+                "duplicates": 1,
+                "llm_filtered": 0,
+                "llm_timeout": 0,
+                "liked": 7,
+                "already_liked": 0,
+                "failed": 0,
+                "reason": "посты закончились",
+            },
+        )
+        send = MagicMock()
+        proc = MagicMock()
+        proc.wait.return_value = 0
+
+        commands._report_completion(proc, send, old_sid)
+
+        send.assert_called_once()
+        text = send.call_args[0][0]
+        assert text.startswith("Сессия завершена: 7 лайков (окончание ")
+        assert ", стоп: посты закончились" in text
+        assert "Постов: 12, 2 отсеяно стоп-словами, 1 дубликатов" in text
+        assert "отсеяно фильтром" not in text
 
     def test_report_completion_error_code(self, mock_config, mock_logger, tmp_path):
         """rc != 0 — отчёт об ошибке с кодом."""

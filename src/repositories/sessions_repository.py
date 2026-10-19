@@ -1,13 +1,16 @@
 """Репозиторий сессий: учёт запусков и дневных лимитов.
 
-Таблица sessions (id, started_at, ended_at, likes_count, session_date, is_auto, pid).
+Таблица sessions (id, started_at, ended_at, likes_count, session_date, is_auto, pid, report).
 is_auto=1 — запуск `run` (учитывается в дневном лимите).
 is_auto=0 — запуск `run --no-limit` (не учитывается в дневном лимите).
 ended_at NULL — сессия ещё идёт (или это зомби: процесс умер жёстко и строку
 никто не закрыл — см. close_zombie_sessions).
 pid — процесс, создавший сессию; по живости pid отличаем идущую сессию от зомби.
+report — JSON-отчёт (счётчики конвейера + причина остановки), пишется в
+end_session; «статус» в боте показывает его второй строкой.
 """
 
+import json
 import os
 import sys
 import time
@@ -53,15 +56,16 @@ class SessionStats(NamedTuple):
 
 
 class LastSession(NamedTuple):
-    """Сессия за сегодня: ID, лайки, время начала и окончания (unix).
+    """Сессия: ID, лайки, время начала и окончания (unix), отчёт (JSON или None).
 
-    Для идущей сессии (ended_at IS NULL) поле ended_at = 0.
+    Для идущей сессии (ended_at IS NULL) поле ended_at = 0, report = None.
     """
 
     id: int
     likes: int
     ended_at: int
     started_at: int
+    report: str | None = None
 
 
 class SessionsRepository:
@@ -111,12 +115,17 @@ class SessionsRepository:
             self._db.commit()
         return closed
 
-    def end_session(self, session_id: int, likes_count: int) -> None:
-        """Фиксирует конец сессии и количество лайков."""
+    def end_session(self, session_id: int, likes_count: int, report: dict | None = None) -> None:
+        """Фиксирует конец сессии, количество лайков и отчёт (JSON в колонке report).
+
+        report — словарь счётчиков (asdict SessionFunnel); None — отчёт не
+        пишется (колонка остаётся NULL), «статус» покажет одну строку.
+        """
         now = int(time.time())
+        report_json = json.dumps(report, ensure_ascii=False) if report is not None else None
         self._db.conn.execute(
-            "UPDATE sessions SET ended_at = ?, likes_count = ? WHERE id = ?",
-            (now, likes_count, session_id),
+            "UPDATE sessions SET ended_at = ?, likes_count = ?, report = ? WHERE id = ?",
+            (now, likes_count, report_json, session_id),
         )
         self._db.commit()
 
@@ -162,7 +171,7 @@ class SessionsRepository:
         (обновляется в update_session_likes после каждого лайка).
         """
         cursor = self._db.conn.execute(
-            "SELECT id, COALESCE(likes_count, 0), 0, started_at "
+            "SELECT id, COALESCE(likes_count, 0), 0, started_at, NULL "
             "FROM sessions WHERE ended_at IS NULL "
             "ORDER BY id DESC LIMIT 1"
         )
@@ -180,14 +189,16 @@ class SessionsRepository:
         get_running_session. Используется в отчёте бота после завершения.
         """
         cursor = self._db.conn.execute(
-            "SELECT id, COALESCE(likes_count, 0), ended_at, started_at "
+            "SELECT id, COALESCE(likes_count, 0), ended_at, started_at, report "
             "FROM sessions WHERE ended_at IS NOT NULL "
             "ORDER BY id DESC LIMIT 1"
         )
         row = cursor.fetchone()
         if row is None:
             return None
-        return LastSession(id=row[0], likes=row[1], ended_at=row[2], started_at=row[3])
+        return LastSession(
+            id=row[0], likes=row[1], ended_at=row[2], started_at=row[3], report=row[4]
+        )
 
     def update_session_likes(self, session_id: int, likes_count: int) -> None:
         """Обновляет текущее число лайков идущей сессии (промежуточный статус)."""

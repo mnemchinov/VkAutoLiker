@@ -76,6 +76,8 @@ class LLMFilterStage:
                 kept.append(p)
         ctx.posts = kept
         removed = before - len(kept) - skipped
+        ctx.funnel.llm_filtered = removed
+        ctx.funnel.llm_timeout = skipped
         if review_mode:
             passed = marked - removed - skipped
             timeout_part = f", {skipped} пропущено: таймаут" if skipped else ""

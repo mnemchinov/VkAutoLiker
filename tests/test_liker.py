@@ -161,7 +161,9 @@ class TestRun:
         with patch("liker.time.sleep"):
             liker.run(no_limit=True)
 
-        liker._sessions_repo.end_session.assert_called_once_with(7, 0)
+        assert liker._sessions_repo.end_session.call_args[0] == (7, 0)
+        report = liker._sessions_repo.end_session.call_args[1]["report"]
+        assert report["reason"] == "нет авторизации"
 
     def test_like_success_increments_count(self, liker, mock_config):
         """Успешный лайк → mark_processed, likes_count растёт."""
@@ -188,6 +190,63 @@ class TestRun:
         assert liker._posts_repo.mark_processed.call_count == 3
         assert liker._sessions_repo.update_session_likes.call_count == 3
         liker._sessions_repo.update_session_likes.assert_called_with(1, 3)
+
+    def test_run_stores_session_report(self, liker, mock_config):
+        """Завершённая сессия — end_session с отчётом: liked, reason, collected."""
+        # 2 поста < цели 3 → пул закончился раньше лимита
+        posts = [_make_post(1, i) for i in range(2)]
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
+        liker._posts_repo.mark_processed = MagicMock()
+
+        ctx = PipelineContext(config=mock_config, posts=posts)
+        ctx.funnel.collected = 10
+        ctx.funnel.filtered = 7
+        liker._pipeline.run = MagicMock(return_value=ctx)
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", return_value=0),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+        ):
+            liker.run(no_limit=True)
+
+        report = liker._sessions_repo.end_session.call_args[1]["report"]
+        assert report["collected"] == 10
+        assert report["filtered"] == 7
+        assert report["liked"] == 2
+        assert report["reason"] == "посты закончились"
+
+    def test_run_report_reason_limit(self, liker, mock_config):
+        """Достигнут лимит лайков — причина остановки в отчёте «лимит лайков сессии»."""
+        posts = [_make_post(1, i) for i in range(5)]
+        mock_config.likes_per_session_min = 2
+        mock_config.likes_per_session_max = 2
+        liker._browser.is_logged_in = MagicMock(return_value=True)
+        liker._sessions_repo.get_daily_stats = MagicMock(return_value=(0, 0))
+        liker._sessions_repo.start_session = MagicMock(return_value=1)
+        liker._sessions_repo.end_session = MagicMock()
+        liker._sessions_repo.get_total_stats = MagicMock(return_value=(1, 2))
+        liker._likes_service.like = MagicMock(return_value=LikeResult.LIKED)
+        liker._posts_repo.mark_processed = MagicMock()
+        liker._pipeline.run = MagicMock(
+            return_value=PipelineContext(config=mock_config, posts=posts)
+        )
+
+        with (
+            patch("liker.time.sleep"),
+            patch("liker.random.uniform", return_value=0),
+            patch("liker.random.randint", side_effect=lambda a, b: a),
+        ):
+            liker.run(no_limit=True)
+
+        report = liker._sessions_repo.end_session.call_args[1]["report"]
+        assert report["liked"] == 2
+        assert report["reason"] == "лимит лайков сессии"
 
     def test_already_liked_skipped_and_marked(self, liker, mock_config):
         """Уже лайкнутый пост → mark_processed, like() вызван, возвращает ALREADY_LIKED."""

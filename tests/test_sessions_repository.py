@@ -5,6 +5,7 @@ get_today_stats, get_running_session, get_last_session, update_session_likes,
 reset. Использует реальную SQLite-БД.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -144,6 +145,46 @@ class TestSessionsRepository:
         # идущая сессия (ended_at IS NULL) — не «последняя завершённая»
         repo.start_session(is_auto=False)
         assert repo.get_last_session().id == sid2
+        db.close()
+
+    def test_end_session_stores_report(self, mock_config, tmp_path):
+        """end_session с report — JSON сохраняется, get_last_session отдаёт его."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        report = {
+            "collected": 214,
+            "filtered": 16,
+            "duplicates": 12,
+            "llm_filtered": 0,
+            "llm_timeout": 0,
+            "liked": 18,
+            "already_liked": 3,
+            "failed": 2,
+            "reason": "лимит лайков сессии",
+        }
+        sid = repo.start_session()
+        repo.end_session(sid, likes_count=18, report=report)
+
+        last = repo.get_last_session()
+        assert last.report is not None
+        saved = json.loads(last.report)
+        assert saved == report
+        db.close()
+
+    def test_end_session_without_report_keeps_null(self, mock_config, tmp_path):
+        """end_session без report — колонка остаётся NULL (старая схема)."""
+        mock_config.db_path = str(tmp_path / "test.db")
+        db = Database(mock_config)
+        run_migrations(db.conn)
+        repo = SessionsRepository(db)
+
+        sid = repo.start_session()
+        repo.end_session(sid, likes_count=5)
+
+        assert repo.get_last_session().report is None
         db.close()
 
     def test_get_today_stats_counts_all_sessions(self, mock_config, tmp_path):
