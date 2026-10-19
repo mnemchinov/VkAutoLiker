@@ -11,6 +11,7 @@ AutoLiker создаёт Pipeline в конструкторе и вызывае�
 
 import random
 import time
+from dataclasses import asdict
 
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
@@ -23,7 +24,14 @@ from post import Post, PostStatus
 from post_filter import DateFilter, EmptyTextFilter, FilterChain, StopWordsFilter
 from repositories import ClosedWallsRepository, PostsRepository, SessionsRepository
 from settings import Settings
-from stages import CollectStage, DedupStage, LLMFilterStage, Pipeline, PipelineContext
+from stages import (
+    CollectStage,
+    DedupStage,
+    LLMFilterStage,
+    Pipeline,
+    PipelineContext,
+    SessionFunnel,
+)
 from stop_flag import StopFlag
 
 
@@ -159,10 +167,14 @@ class AutoLiker:
         else:
             self._logger.info("=== Сессия AutoLiker запущена ===")
 
+        # Отчёт сессии создаётся до старта браузера: сбой в старт-фазе
+        # («нет авторизации») тоже записывается в строку с причиной
+        funnel = SessionFunnel()
         self._browser.start()
         if not self._browser.is_logged_in():
             self._logger.error("Нет авторизации. Сначала выполните команду 'login'.")
-            self._sessions_repo.end_session(session_id, 0)
+            funnel.reason = "нет авторизации"
+            self._sessions_repo.end_session(session_id, 0, report=asdict(funnel))
             return
 
         # Jitter для авто-запуска: размывает фиксированные времена запуска
@@ -181,11 +193,15 @@ class AutoLiker:
         )
 
         try:
-            ctx = PipelineContext(config=self._config, target_likes=target)
+            ctx = PipelineContext(config=self._config, target_likes=target, funnel=funnel)
             ctx = self._pipeline.run(ctx)
+            # Стадии пишут в funnel возвращённого контекста — перепривязываем:
+            # конвейер может вернуть другой объект, и отчёт должен быть тем же
+            funnel = ctx.funnel
             all_posts = ctx.posts
             if not all_posts:
                 self._logger.info("Нет постов после фильтрации")
+                funnel.reason = "постов для лайка не нашлось"
                 return
 
             # Эффективный лимит: пул может быть меньше target (на стенах нет
@@ -201,11 +217,16 @@ class AutoLiker:
             for index, post in enumerate(all_posts):
                 if likes_count >= limit:
                     self._logger.info(f"Лимит лайков за сессию достигнут ({likes_count}/{limit})")
+                    # Пул меньше цели — «достигнутый лимит» это просто конец пула
+                    funnel.reason = (
+                        "лимит лайков сессии" if limit == target else "посты закончились"
+                    )
                     break
 
                 # Стоп-условие: файловый флаг (кнопка/команда «стоп» из бота)
                 if self._stop_flag.exists():
                     self._logger.info("Получен сигнал остановки — завершение сессии")
+                    funnel.reason = "стоп по команде"
                     break
 
                 # Стоп-условие: серия капч — VK заподозрил автоматизацию
@@ -213,6 +234,7 @@ class AutoLiker:
                     self._logger.warning(
                         f"Превышен лимит капч ({captcha_streak}/{self._config.max_captcha_streak}) — остановка сессии"
                     )
+                    funnel.reason = "капча — стоп"
                     break
 
                 if self._posts_repo.is_processed(post.owner_id, post.item_id):
@@ -225,6 +247,7 @@ class AutoLiker:
 
                     if result == LikeResult.LIKED:
                         likes_count += 1
+                        funnel.liked = likes_count
                         # Промежуточный статус: текущее число лайков видно в status()
                         self._sessions_repo.update_session_likes(session_id, likes_count)
                         likes_since_break += 1
@@ -235,6 +258,7 @@ class AutoLiker:
                         self._logger.info(f"Лайкнут ({likes_count}/{limit})")
                     elif result == LikeResult.ALREADY_LIKED:
                         already_liked_count += 1
+                        funnel.already_liked = already_liked_count
                         captcha_streak = 0
                         self._posts_repo.mark_processed(
                             post.owner_id, post.item_id, PostStatus.LIKED
@@ -248,12 +272,15 @@ class AutoLiker:
                             f"Капча ({captcha_streak}/{self._config.max_captcha_streak}): {post.owner_id}_{post.item_id}"
                         )
                     else:  # FAILED
+                        funnel.failed += 1
                         self._logger.warning(f"Лайк не удался: {post.owner_id}_{post.item_id}")
 
                 except (WebDriverException, InvalidSessionIdException) as e:
                     self._logger.error(f"Крах браузера, остановка сессии: {e}")
+                    funnel.reason = "крах браузера"
                     break
                 except Exception as e:
+                    funnel.failed += 1
                     self._logger.error(f"Ошибка обработки {post.owner_id}_{post.item_id}: {e}")
                     continue
 
@@ -285,12 +312,23 @@ class AutoLiker:
             if likes_count < limit:
                 self._logger.info(f"Досрочное завершение: лайков {likes_count}/{limit}")
 
+            # Причина не установлена в break-ветках — нормальный выход цикла:
+            # либо лимит цели достигнут на последнем посте (break не сработал),
+            # либо посты закончились раньше лимита
+            if not funnel.reason:
+                if likes_count >= limit and limit == target:
+                    funnel.reason = "лимит лайков сессии"
+                else:
+                    funnel.reason = "посты закончились"
+
         except CaptchaError as e:
             self._logger.warning(f"Капча от VK API при сборе постов: {e}")
+            funnel.reason = "капча от API при сборе"
         except KeyboardInterrupt:
             self._logger.info("Прервано пользователем")
+            funnel.reason = "прервано пользователем"
         finally:
-            self._sessions_repo.end_session(session_id, likes_count)
+            self._sessions_repo.end_session(session_id, likes_count, report=asdict(funnel))
             total_sessions, total_likes = self._sessions_repo.get_total_stats()
             if already_liked_count > 0:
                 self._logger.info(f"Уже лайкнуты: {already_liked_count} постов пропущено")

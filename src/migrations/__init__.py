@@ -9,19 +9,27 @@ run_migrations проверяет текущую версию и применя�
   2 — добавлена колонка is_auto (m002_add_is_auto).
   3 — добавлена колонка status (m003_add_status).
   4 — добавлена колонка pid в sessions (m004_add_pid).
+  5 — добавлена колонка report в sessions (m005_add_report).
 """
 
 import sqlite3
 
-from migrations import m001_create_tables, m002_add_is_auto, m003_add_status, m004_add_pid
+from migrations import (
+    m001_create_tables,
+    m002_add_is_auto,
+    m003_add_status,
+    m004_add_pid,
+    m005_add_report,
+)
 
-LATEST_VERSION = 4
+LATEST_VERSION = 5
 
 _MIGRATIONS = [
     m001_create_tables.upgrade,
     m002_add_is_auto.upgrade,
     m003_add_status.upgrade,
     m004_add_pid.upgrade,
+    m005_add_report.upgrade,
 ]
 
 

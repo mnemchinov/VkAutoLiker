@@ -207,6 +207,8 @@ class TestLLMFilterStage:
 
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == 2
+        assert result.funnel.llm_filtered == 2
+        assert result.funnel.llm_timeout == 0
 
     def test_keeps_all_on_exception(self, mock_config, mock_logger):
         """Ошибка LLM → все посты остаются (should_skip False)."""
@@ -274,6 +276,8 @@ class TestLLMFilterStage:
         assert len(result.posts) == 1
         assert result.posts[0].owner_id == 2
         posts_repo.mark_processed.assert_not_called()
+        assert result.funnel.llm_filtered == 0
+        assert result.funnel.llm_timeout == 1
 
     def test_mark_processed_error_doesnt_crash(self, mock_config, mock_logger):
         """Ошибка mark_processed (БД заблокирована) — стадия не падает, пост отсеян."""

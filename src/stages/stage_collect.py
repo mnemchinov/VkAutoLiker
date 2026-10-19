@@ -79,6 +79,7 @@ class CollectStage:
             fresh: list[Post] = []
             for p in posts:
                 if self._structural.should_skip(p):
+                    ctx.funnel.filtered += 1
                     continue
                 if self._posts_repo.is_processed(p.owner_id, p.item_id):
                     continue
@@ -92,8 +93,10 @@ class CollectStage:
                             self._posts_repo.mark_processed(
                                 p.owner_id, p.item_id, PostStatus.FILTERED
                             )
+                            ctx.funnel.filtered += 1
                             continue
                 if p.from_id == self._config.user_id:
+                    ctx.funnel.filtered += 1
                     continue
                 fresh.append(p)
             random.shuffle(fresh)
@@ -226,5 +229,6 @@ class CollectStage:
         self._structural.log_summaries()
         if self._stop_words is not None:
             self._stop_words.log_summary()
+        ctx.funnel.collected = len(all_posts)
         ctx.posts = all_posts
         return ctx

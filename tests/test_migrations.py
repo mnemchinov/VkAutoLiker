@@ -144,6 +144,38 @@ class TestMigrations:
         assert row[1] == 5
         conn.close()
 
+    def test_migrate_adds_report_column(self, mock_config, tmp_path):
+        """Старая БД без report → миграция добавляет sessions.report (легаси — NULL)."""
+        db_path = str(tmp_path / "test.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER,
+                likes_count INTEGER DEFAULT 0,
+                session_date TEXT NOT NULL,
+                is_auto INTEGER NOT NULL DEFAULT 1,
+                pid INTEGER
+            )
+        """)
+        conn.execute(
+            "INSERT INTO sessions (started_at, session_date, likes_count) "
+            "VALUES (1700000000, '2026-01-01', 5)"
+        )
+        conn.commit()
+        conn.close()
+
+        conn = sqlite3.connect(db_path)
+        run_migrations(conn)
+
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()]
+        assert "report" in cols
+
+        row = conn.execute("SELECT report FROM sessions WHERE id = 1").fetchone()
+        assert row[0] is None
+        conn.close()
+
     def test_idempotent_run(self, mock_config, tmp_path):
         """Повторный запуск run_migrations на свежей БД — не падает."""
         db_path = str(tmp_path / "test.db")

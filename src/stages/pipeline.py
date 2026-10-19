@@ -13,6 +13,27 @@ from settings import Settings
 
 
 @dataclass
+class SessionFunnel:
+    """Отчёт о сессии: счётчики постов по этапам и причина остановки.
+
+    Конвейерные стадии инкрементят свои счётчики (collected/filtered/
+    duplicates/llm_*), цикл лайков в liker.run() — liked/already_liked/
+    failed и reason. Сериализуется в JSON и хранится в sessions.report —
+    «статус» в боте показывает его второй строкой.
+    """
+
+    collected: int = 0
+    filtered: int = 0
+    duplicates: int = 0
+    llm_filtered: int = 0
+    llm_timeout: int = 0
+    liked: int = 0
+    already_liked: int = 0
+    failed: int = 0
+    reason: str = ""
+
+
+@dataclass
 class PipelineContext:
     """Контекст конвейера: переносит посты, конфиг и target_likes между стадиями.
 
@@ -20,11 +41,14 @@ class PipelineContext:
     config — конфигурация приложения, доступна всем стадиям.
     target_likes — целевое число лайков в текущей сессии (random от min до max),
     используется CollectStage для раннего выхода (enough = target_likes * 2).
+    funnel — отчёт сессии: стадии пишут свои счётчики, liker.run() дописывает
+    лайки и причину остановки.
     """
 
     config: Settings
     target_likes: int = 0
     posts: list[Post] = field(default_factory=list)
+    funnel: SessionFunnel = field(default_factory=SessionFunnel)
 
 
 @runtime_checkable

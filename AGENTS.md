@@ -65,7 +65,7 @@ src/                   — весь код: плоские модули + пак
   post_filter/         — protocol, DateFilter, EmptyTextFilter, StopWordsFilter (matched/StopMatch), LLMTopicFilter, FilterChain
   stages/              — Pipeline + PipelineContext; CollectStage (6 источников, ранний выход), DedupStage, LLMFilterStage (review/llm)
   api_client/          — VKApiClient (rate-limit, ретраи), VkApiSearchService (newsfeed.search / wall.get / friends.get / groups.get), VKApiError, CaptchaError
-  migrations/          — миграции схемы через PRAGMA user_version (m001–m004)
+  migrations/          — миграции схемы через PRAGMA user_version (m001–m005)
   repositories/        — PostsRepository, SessionsRepository, ClosedWallsRepository
 stop_words.txt         — словарь стоп-слов: одно слово на строку, `#` — комментарий,
                           `!` — жёсткое слово, без суффикса — мягкое
@@ -133,11 +133,11 @@ python src/main.py tgbot    # Telegram-бот: резидентный long polli
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (303 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (315 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
-pytest --cov=src --cov-report=term-missing  # с покрытием (87%)
+pytest --cov=src --cov-report=term-missing  # с покрытием (88%)
 ```
 
 - Маркеры `browser` и `live` объявлены в `pytest.ini`.
@@ -147,7 +147,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (87%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 303 тестов, маркер не нужен.
+- Юнит-тесты на моках — 315 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -244,6 +244,16 @@ pytest -m "not browser and not live"    # базовая страховка по
     а не через 1–1,5 мин старт-фазы. Лимит-чек — до строки, чтобы сессия не засчитывала
     сама себя; auto-run сверх лимита выходит без запуска Chrome. Сбой авторизации после
     `start_session` закрывает сессию `end_session(id, 0)` — строка не висит зомби.
+    **Отчёт сессии** (`sessions.report`, m005, JSON): `SessionFunnel` в `stages/pipeline.py`
+    — `collected/filtered` (CollectStage), `duplicates` (DedupStage), `llm_filtered/llm_timeout`
+    (LLMFilterStage), `liked/already_liked/failed` + `reason` (цикл лайков). `reason` — причина
+    остановки («лимит лайков сессии» / «посты закончились» / «стоп по команде» / «капча — стоп» /
+    «крах браузера» / «нет авторизации» / «капча от API при сборе» /
+    «прервано пользователем» / «постов для лайка не нашлось»).
+    Пул меньше цели — «посты закончились», не «лимит». `end_session(..., report=asdict(funnel))`
+    пишет колонку; «статус» (Commands.status) показывает последнюю сессию двумя строками:
+    время/длительность/лайки/причина + «Постов: N, …» из отчёта (старые сессии без отчёта —
+    одна строка, как раньше).
 9. **`is_processed` фильтруется при сборе, не только в цикле лайков.** `CollectStage.process()`
     в `stage_collect.py` проверяет `PostsRepository.is_processed()` **до** проверки стоп-слов
     и до добавления в `all_posts` — ранний выход `enough = target_likes * 2` считает только
