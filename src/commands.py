@@ -101,8 +101,7 @@ class Commands:
                 lines.extend(self._format_last_session(last))
         return "\n".join(lines)
 
-    @staticmethod
-    def _format_last_session(last: LastSession) -> list[str]:
+    def _format_last_session(self, last: LastSession) -> list[str]:
         """Формат последней завершённой сессии.
 
         Первая строка — дата, время, длительность, лайки, причина остановки
@@ -130,14 +129,27 @@ class Commands:
             f"{last.likes} {_plural(last.likes, 'лайк', 'лайка', 'лайков')}"
         )
         lines = [first]
-        if not last.report:
-            return lines
-        try:
-            report = json.loads(last.report)
-        except json.JSONDecodeError:
+        report = self._parse_report(last.report)
+        if report is None:
             return lines
         if report.get("reason"):
             lines[0] = f"{lines[0]}, стоп: {report['reason']}"
+        lines.append(self._format_posts_line(report))
+        return lines
+
+    @staticmethod
+    def _parse_report(report: str | None) -> dict | None:
+        """Разбирает JSON-отчёт сессии; None — отчёт отсутствует или битый."""
+        if not report:
+            return None
+        try:
+            return json.loads(report)
+        except json.JSONDecodeError:
+            return None
+
+    @staticmethod
+    def _format_posts_line(report: dict) -> str:
+        """Строка отчёта о постах: собрано/отсеяно/дубликаты/LLM/уже лайкнуты/провалы."""
         parts = [f"Постов: {report.get('collected', 0)}"]
         if report.get("filtered"):
             parts.append(f"{report['filtered']} отсеяно фильтром")
@@ -151,8 +163,7 @@ class Commands:
             parts.append(f"{report['already_liked']} уже были с лайком")
         if report.get("failed"):
             parts.append(f"{report['failed']} не удалось")
-        lines.append(", ".join(parts))
-        return lines
+        return ", ".join(parts)
 
     def help(self) -> str:
         """Возвращает список доступных команд."""
@@ -220,7 +231,13 @@ class Commands:
             send("Сессия не началась: в базе нет записи о новой сессии")
             return
         ended = datetime.fromtimestamp(last.ended_at).strftime("%H:%M")
-        send(
+        message = (
             f"Сессия завершена: "
             f"{last.likes} {_plural(last.likes, 'лайк', 'лайка', 'лайков')} (окончание {ended})"
         )
+        report = self._parse_report(last.report)
+        if report is not None:
+            if report.get("reason"):
+                message += f", стоп: {report['reason']}"
+            message += f"\n{self._format_posts_line(report)}"
+        send(message)

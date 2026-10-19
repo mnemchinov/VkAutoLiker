@@ -306,6 +306,42 @@ class TestCommands:
         send.assert_called_once()
         text = send.call_args[0][0]
         assert text.startswith("Сессия завершена: 7 лайков (окончание ")
+        # Без отчёта (end_session без report) — вторая строка не добавляется
+        assert "Постов:" not in text
+
+    def test_report_completion_with_report(self, mock_config, mock_logger, tmp_path):
+        """Отчёт сессии — причина остановки и строка постов в том же сообщении."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        old_sid = repo.start_session(is_auto=False)
+        repo.end_session(old_sid, likes_count=1)
+        new_sid = repo.start_session(is_auto=False)
+        repo.end_session(
+            new_sid,
+            likes_count=7,
+            report={
+                "collected": 12,
+                "filtered": 5,
+                "duplicates": 1,
+                "llm_filtered": 0,
+                "llm_timeout": 0,
+                "liked": 7,
+                "already_liked": 0,
+                "failed": 0,
+                "reason": "посты закончились",
+            },
+        )
+        send = MagicMock()
+        proc = MagicMock()
+        proc.wait.return_value = 0
+
+        commands._report_completion(proc, send, old_sid)
+
+        send.assert_called_once()
+        text = send.call_args[0][0]
+        assert text.startswith("Сессия завершена: 7 лайков (окончание ")
+        assert ", стоп: посты закончились" in text
+        assert "Постов: 12, 5 отсеяно фильтром, 1 дубликатов" in text
 
     def test_report_completion_error_code(self, mock_config, mock_logger, tmp_path):
         """rc != 0 — отчёт об ошибке с кодом."""
