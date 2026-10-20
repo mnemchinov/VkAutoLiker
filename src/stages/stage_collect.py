@@ -12,6 +12,10 @@ stop_words (жёсткое '!' → FILTERED; режим review → метка д
 is_processed проверяется до stop_words намеренно: уже помеченный FILTERED пост
 не должен повторно доходить до StopWordsFilter и снова маркироваться при следующем
 сборе (в т.ч. вторым источником в той же сессии).
+
+VK_EXCLUDE_WALLS — стены из списка исключений не собираются вовсе: для
+groups/accounts/auto_friends/auto_groups стена не опрашивается, для
+queries/hashtags пост отсекается по owner_id при сборе.
 """
 
 import random
@@ -57,6 +61,18 @@ class CollectStage:
         self._stop_words = stop_words_filter
         self._logger = logger
 
+        # VK_EXCLUDE_WALLS: screen_name — через resolveScreenName, ID — как есть
+        excluded: set[int] = set()
+        for token in config.exclude_walls:
+            if token.lstrip("-").isdigit():
+                excluded.add(int(token))
+            else:
+                owner_id = self._search.resolve_screen_name(token)
+                if owner_id is None:
+                    raise ValueError(f"VK_EXCLUDE_WALLS: стена не найдена: {token}")
+                excluded.add(owner_id)
+        self._excluded_owners = excluded
+
     def process(self, ctx: PipelineContext) -> PipelineContext:
         """Собирает посты из 6 источников с приоритетом и ранним выходом."""
         if ctx.target_likes <= 0:
@@ -78,6 +94,9 @@ class CollectStage:
             """
             fresh: list[Post] = []
             for p in posts:
+                if p.owner_id in self._excluded_owners:
+                    ctx.funnel.excluded += 1
+                    continue
                 if self._structural.should_skip(p):
                     ctx.funnel.filtered += 1
                     continue
@@ -121,6 +140,11 @@ class CollectStage:
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID группы: {screen_name}")
                     continue
+                if owner_id in self._excluded_owners:
+                    self._logger.info(
+                        f"Стена {screen_name} в исключениях (VK_EXCLUDE_WALLS), пропуск"
+                    )
+                    continue
                 if self._walls_repo.is_wall_closed(owner_id):
                     self._logger.info(f"Стена группы {screen_name} закрыта (кэш), пропуск")
                     continue
@@ -141,6 +165,11 @@ class CollectStage:
                 owner_id = self._search.resolve_screen_name(screen_name)
                 if owner_id is None:
                     self._logger.warning(f"Не удалось определить ID пользователя: {screen_name}")
+                    continue
+                if owner_id in self._excluded_owners:
+                    self._logger.info(
+                        f"Стена {screen_name} в исключениях (VK_EXCLUDE_WALLS), пропуск"
+                    )
                     continue
                 if self._walls_repo.is_wall_closed(owner_id):
                     self._logger.info(f"Стена пользователя {screen_name} закрыта (кэш), пропуск")
@@ -168,6 +197,9 @@ class CollectStage:
             random.shuffle(friend_ids)
             api_calls = 0
             for fid in friend_ids:
+                if fid in self._excluded_owners:
+                    self._logger.info(f"Стена {fid} в исключениях (VK_EXCLUDE_WALLS), пропуск")
+                    continue
                 if len(all_posts) >= enough and api_calls >= self._config.min_friends_to_poll:
                     self._logger.info(
                         f"Достаточно постов ({len(all_posts)}), пропуск остальных друзей"
@@ -202,6 +234,9 @@ class CollectStage:
             random.shuffle(group_ids)
             api_calls = 0
             for gid in group_ids:
+                if gid in self._excluded_owners:
+                    self._logger.info(f"Стена {gid} в исключениях (VK_EXCLUDE_WALLS), пропуск")
+                    continue
                 if len(all_posts) >= enough:
                     self._logger.info(
                         f"Достаточно постов ({len(all_posts)}), пропуск остальных групп"
@@ -226,6 +261,10 @@ class CollectStage:
                     continue
 
         self._logger.info(f"Собрано {len(all_posts)} необработанных постов")
+        if ctx.funnel.excluded:
+            self._logger.info(
+                f"Исключения (VK_EXCLUDE_WALLS): пропущено {ctx.funnel.excluded} постов"
+            )
         self._structural.log_summaries()
         if self._stop_words is not None:
             self._stop_words.log_summary()

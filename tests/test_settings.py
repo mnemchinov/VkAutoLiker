@@ -161,6 +161,15 @@ class TestEnvVars:
 
         assert s.stop_words == ["политика", "религия", "наркотики"]
 
+    def test_exclude_walls_env_var_comma_separated(self, monkeypatch):
+        """VK_EXCLUDE_WALLS парсится как comma-separated список (screen_name/ID)."""
+        monkeypatch.delenv("VK_SERVICE_TOKEN", raising=False)
+        monkeypatch.delenv("VK_LLM_API_KEY", raising=False)
+        monkeypatch.setenv("VK_EXCLUDE_WALLS", "magnitovcy, 123456, -7307885")
+        s = Settings(_env_file=None)
+
+        assert s.exclude_walls == ["magnitovcy", "123456", "-7307885"]
+
 
 class TestValidation:
     """Тесты валидации @model_validator и @field_validator."""

@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![Selenium](https://img.shields.io/badge/Selenium-4.15%2B-green?logo=selenium)
-![Tests](https://img.shields.io/badge/tests-316%20passed-brightgreen?logo=pytest)
+![Tests](https://img.shields.io/badge/tests-326%20passed-brightgreen?logo=pytest)
 ![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen?logo=pytest)
 ![SQLite](https://img.shields.io/badge/SQLite-state%20storage-003B57?logo=sqlite)
 ![Scheduling](https://img.shields.io/badge/scheduling-VK%20bot%20(launchd%20%2F%20Task%20Scheduler)-lightgrey)
@@ -185,6 +185,7 @@ python src/main.py run --no-limit  # ручной запуск без учёта
 | `hashtags` | `VK_HASHTAGS` | `[]` | `#СоздаюСвойМагнит,#яВыбираюМагнит` | Хештеги через `newsfeed.search` (comma-separated) |
 | `groups` | `VK_GROUPS` | `[]` | `magnet,vkteam` | Короткие имена сообществ `screen_name` (comma-separated) |
 | `accounts` | `VK_ACCOUNTS` | `[]` | `durov` | Короткие имена пользователей `screen_name` (comma-separated) |
+| `exclude_walls` | `VK_EXCLUDE_WALLS` | `[]` | `magnitovcy,-7307885` | Стены, которые не собираются: `screen_name` группы или ID (comma-separated) |
 | `auto_friends` | `VK_AUTO_FRIENDS` | `false` | `true` | Сбор постов со стен друзей |
 | `auto_groups` | `VK_AUTO_GROUPS` | `false` | `true` | Сбор постов со стен подписок |
 | `max_posts_per_query` | `VK_MAX_POSTS_PER_QUERY` | `100` | — | Лимит постов с одного текстового запроса |
@@ -313,6 +314,11 @@ VK_LLM_SSL_VERIFY=false
 **Закрытые стены:** недоступные, удалённые и приватные стены запоминаются в SQLite
 и не запрашиваются повторно в течение `closed_wall_ttl_days` (7 дней по умолчанию).
 Это экономит значительную часть API-вызовов к друзьям.
+
+**Исключения (`VK_EXCLUDE_WALLS`):** стены из списка не собираются вовсе — во
+всех источниках. Для `groups`/`accounts`/друзей/подписок стена даже не
+опрашивается, для `queries`/`hashtags` пост отсекается по `owner_id` при сборе.
+Пост не попадает в пул и не записывается в `processed_posts`.
 
 ## Фильтрация
 

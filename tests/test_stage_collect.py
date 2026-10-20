@@ -28,6 +28,7 @@ def _make_post(owner_id: int, item_id: int, text: str = "текст поста")
 def collect_stage(mock_config, mock_logger):
     """CollectStage с мок-зависимостями."""
     search = MagicMock()
+    search.resolve_screen_name = MagicMock(return_value=None)
     posts_repo = MagicMock()
     posts_repo.is_processed = MagicMock(return_value=False)
     posts_repo.mark_processed = MagicMock()
@@ -438,3 +439,134 @@ class TestCollectStage:
         # enough = 5 * 2 = 10; 4 друга × 3 поста = 12 ≥ 10, но min_friends_to_poll=5
         # → early-exit не срабатывает до 5-го друга
         assert collect_stage._search.get_wall_posts.call_count >= 5
+
+
+class TestCollectStageExcludeWalls:
+    """VK_EXCLUDE_WALLS: разворот списка, пропуск стен и постов, ошибка на опечатку."""
+
+    def _stage_with_exclude(self, mock_config, mock_logger, exclude_walls):
+        mock_config.exclude_walls = exclude_walls
+        search = MagicMock()
+        search.resolve_screen_name = MagicMock(side_effect=lambda s: -99 if s == "g_ex" else None)
+        posts_repo = MagicMock()
+        posts_repo.is_processed = MagicMock(return_value=False)
+        walls_repo = MagicMock()
+        walls_repo.is_wall_closed = MagicMock(return_value=False)
+        structural = MagicMock()
+        structural.should_skip = MagicMock(return_value=False)
+        structural.log_summaries = MagicMock()
+        return CollectStage(search, mock_config, posts_repo, walls_repo, structural, mock_logger)
+
+    def test_parse_mixed_list(self, mock_config, mock_logger):
+        """Числа и отрицательные ID — как есть, screen_name — через resolve."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["g_ex", "123", "-456"])
+
+        assert stage._excluded_owners == {-99, 123, -456}
+        stage._search.resolve_screen_name.assert_called_once_with("g_ex")
+
+    def test_unknown_screen_name_raises(self, mock_config, mock_logger):
+        """Опечатка в списке — явная ValueError при создании стадии, не молчаливый пропуск."""
+        with pytest.raises(ValueError, match="стена не найдена"):
+            self._stage_with_exclude(mock_config, mock_logger, ["опечатка"])
+
+    def test_post_from_excluded_wall_skipped_in_queries(self, mock_config, mock_logger):
+        """Пост со стены из исключений (queries) не попадает в пул, счётчик растёт."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["-7307885"])
+        mock_config.queries = ["тест"]
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        stage._search.search = MagicMock(return_value=[_make_post(-7307885, 1), _make_post(1, 2)])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = stage.process(ctx)
+
+        assert [(p.owner_id, p.item_id) for p in result.posts] == [(1, 2)]
+        assert result.funnel.excluded == 1
+        assert result.funnel.collected == 1
+
+    def test_groups_source_skips_excluded_wall(self, mock_config, mock_logger):
+        """groups-источник: стена из исключений не опрашивается (wall.get не вызывается)."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["g_ex"])
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = ["g_ex"]
+        mock_config.accounts = []
+        stage._search.search = MagicMock(return_value=[])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = stage.process(ctx)
+
+        stage._search.get_wall_posts.assert_not_called()
+        assert result.posts == []
+        assert result.funnel.excluded == 0
+
+    def test_accounts_source_skips_excluded_wall(self, mock_config, mock_logger):
+        """accounts-источник: стена из исключений не опрашивается."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["g_ex"])
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = ["g_ex"]
+        stage._search.search = MagicMock(return_value=[])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = stage.process(ctx)
+
+        stage._search.get_wall_posts.assert_not_called()
+        assert result.posts == []
+
+    def test_auto_friends_skips_excluded_wall(self, mock_config, mock_logger):
+        """auto_friends: стена исключённого друга не опрашивается."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["100"])
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        mock_config.auto_friends = True
+        mock_config.auto_groups = False
+        stage._search.search = MagicMock(return_value=[])
+        stage._search.get_friends = MagicMock(return_value=[100, 200])
+        stage._search.get_wall_posts = MagicMock(return_value=[])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        stage.process(ctx)
+
+        # 100 — в исключениях: wall.get только для 200
+        assert [c.args[0] for c in stage._search.get_wall_posts.call_args_list] == [200]
+
+    def test_auto_groups_skips_excluded_wall(self, mock_config, mock_logger):
+        """auto_groups: стена исключённой группы не опрашивается."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, ["-100"])
+        mock_config.queries = []
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        mock_config.auto_friends = False
+        mock_config.auto_groups = True
+        stage._search.search = MagicMock(return_value=[])
+        stage._search.get_groups = MagicMock(return_value=[-100, -200])
+        stage._search.get_wall_posts = MagicMock(return_value=[])
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        stage.process(ctx)
+
+        # -100 — в исключениях: wall.get только для -200
+        assert [c.args[0] for c in stage._search.get_wall_posts.call_args_list] == [-200]
+
+    def test_no_exclusions_no_behavior_change(self, mock_config, mock_logger):
+        """Пустой список исключений — поведение как раньше, resolve не вызывается."""
+        stage = self._stage_with_exclude(mock_config, mock_logger, [])
+        mock_config.queries = ["тест"]
+        mock_config.hashtags = []
+        mock_config.groups = []
+        mock_config.accounts = []
+        posts = [_make_post(1, i) for i in range(3)]
+        stage._search.search = MagicMock(return_value=posts)
+
+        ctx = PipelineContext(config=mock_config, target_likes=5)
+        result = stage.process(ctx)
+
+        assert len(result.posts) == 3
+        assert result.funnel.excluded == 0
+        stage._search.resolve_screen_name.assert_not_called()

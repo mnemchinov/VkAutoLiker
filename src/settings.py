@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     VK API: service_token, api_version, base_url.
     Браузер: profile_path, headless.
-    Поиск: queries, hashtags, groups, accounts, auto_friends, auto_groups, лимиты сбора.
+    Поиск: queries, hashtags, groups, accounts, exclude_walls, auto_friends, auto_groups, лимиты сбора.
     LLM: llm_model, llm_api_base, llm_api_key, llm_system_prompt, llm_stop_topics,
     llm_timeout, llm_max_text_length, llm_max_tokens, llm_ssl_verify.
     Лимиты/задержки: likes_per_session_min/max, sessions_per_day, delays, max_captcha_streak.
@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     hashtags: Annotated[list[str], NoDecode] = []
     groups: Annotated[list[str], NoDecode] = []
     accounts: Annotated[list[str], NoDecode] = []
+    exclude_walls: Annotated[list[str], NoDecode] = []
     auto_friends: bool = False
     auto_groups: bool = False
     max_posts_per_query: int = 100
@@ -131,7 +132,14 @@ class Settings(BaseSettings):
     telegram_owner_id: int = 0
 
     @field_validator(
-        "queries", "hashtags", "groups", "accounts", "stop_words", "llm_stop_topics", mode="before"
+        "queries",
+        "hashtags",
+        "groups",
+        "accounts",
+        "exclude_walls",
+        "stop_words",
+        "llm_stop_topics",
+        mode="before",
     )
     @classmethod
     def _parse_list_fields(cls, v) -> list[str]:
