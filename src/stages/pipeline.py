@@ -25,6 +25,7 @@ class SessionFunnel:
 
     collected: int = 0
     filtered: int = 0
+    excluded: int = 0
     stop_words_filtered: int = 0
     duplicates: int = 0
     llm_filtered: int = 0

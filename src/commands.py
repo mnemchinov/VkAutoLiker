@@ -151,6 +151,8 @@ class Commands:
     def _format_posts_line(report: dict) -> str:
         """Строка отчёта о постах: собрано/стоп-слова/дубликаты/LLM/уже лайкнуты/провалы."""
         parts = [f"Постов: {report.get('collected', 0)}"]
+        if report.get("excluded"):
+            parts.append(f"{report['excluded']} пропущено по исключениям")
         if report.get("stop_words_filtered"):
             parts.append(f"{report['stop_words_filtered']} отсеяно стоп-словами")
         if report.get("duplicates"):

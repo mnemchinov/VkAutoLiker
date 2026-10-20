@@ -135,7 +135,7 @@ python src/main.py tgbot    # Telegram-бот: резидентный long polli
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (316 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (326 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -149,7 +149,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (88%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 316 тестов, маркер не нужен.
+- Юнит-тесты на моках — 326 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -249,7 +249,8 @@ pytest -m "not browser and not live"    # базовая страховка по
     **Отчёт сессии** (`sessions.report`, m005, JSON): `SessionFunnel` в `stages/pipeline.py`
     — `collected/filtered/stop_words_filtered` (CollectStage; `filtered` — структурный
     отсев: дата + неизвестное + свои посты, в строку статуса не выходит; `stop_words_filtered`
-    — жёсткие стоп-слова, в строке — «отсеяно стоп-словами»), `duplicates` (DedupStage),
+    — жёсткие стоп-слова, в строке — «отсеяно стоп-словами»; `excluded` — посты со стен из
+    `VK_EXCLUDE_WALLS`, в строке — «N пропущено по исключениям»), `duplicates` (DedupStage),
     `llm_filtered/llm_timeout` (LLMFilterStage), `liked/already_liked/failed` + `reason`
     (цикл лайков). `reason` — причина
     остановки («лимит лайков сессии» / «посты закончились» / «стоп по команде» / «капча — стоп» /
@@ -292,6 +293,15 @@ pytest -m "not browser and not live"    # базовая страховка по
     `resolveScreenName` + `wall.get` по ID работают независимо от видимости списка
     участников и полноты `groups.get`. Новое сообщество, которое обязано попадать
     в пул, — добавлять его `screen_name` в `VK_GROUPS` вручную.
+    **Исключения (`VK_EXCLUDE_WALLS`):** стены из списка не собираются во всех
+    источниках: для `groups`/`accounts`/друзей/подписок стена не опрашивается
+    (лог «Стена X в исключениях (VK_EXCLUDE_WALLS), пропуск» в каждом цикле),
+    для `queries`/`hashtags` пост отсекается по `owner_id` в `_accept()`. Счётчик
+    — `SessionFunnel.excluded` (посты), в строке отчёта — «N пропущено по
+    исключениям» (только N > 0), лог «Исключения (VK_EXCLUDE_WALLS): пропущено N постов».
+    Разворот списка в `CollectStage.__init__`: числа как есть, screen_name — через
+    `resolveScreenName`, стена не найдена — `ValueError` при старте (не молчаливый
+    пропуск). Пост не попадает в пул и не записывается в `processed_posts`.
 12. **Stale Chrome cleanup перед стартом.** `VKBrowser.start()` завершает процессы Chrome,
     использующие `chrome_profile/` (на POSIX — `pgrep` + `SIGTERM`, на Windows — PowerShell
     CIM + `SIGTERM`, который там — `TerminateProcess`, жёсткий килл), удаляет lock-файлы (`SingletonLock`, `SingletonCookie`, `SingletonSocket`)

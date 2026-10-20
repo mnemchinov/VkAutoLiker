@@ -58,6 +58,7 @@ class TestCommands:
         report = {
             "collected": 214,
             "filtered": 16,
+            "excluded": 3,
             "stop_words_filtered": 4,
             "duplicates": 12,
             "llm_filtered": 0,
@@ -74,12 +75,28 @@ class TestCommands:
         assert "Последняя: сегодня " in text
         assert "18 лайков" in text
         assert "стоп: лимит лайков сессии" in text
-        # «filtered» (структурный шум) в строку не попадает — только стоп-слова
+        # «filtered» (структурный шум) в строку не попадает — только исключения и стоп-слова
         assert (
-            "Постов: 214, 4 отсеяно стоп-словами, 12 дубликатов, 3 уже были с лайком, 2 не удалось"
-            in text
+            "Постов: 214, 3 пропущено по исключениям, 4 отсеяно стоп-словами, "
+            "12 дубликатов, 3 уже были с лайком, 2 не удалось" in text
         )
         assert "отсеяно фильтром" not in text
+
+    def test_status_posts_line_without_excluded(self, mock_config, mock_logger, tmp_path):
+        """excluded = 0 (или отсутствует в старом отчёте) — часть «по исключениям» не показывается."""
+        commands = self._make_commands(mock_config, mock_logger, tmp_path)
+        repo = commands._sessions_repo
+        sid = repo.start_session(is_auto=False)
+        repo.end_session(
+            sid,
+            likes_count=1,
+            report={"collected": 12, "stop_words_filtered": 2, "reason": "посты закончились"},
+        )
+
+        text = commands.status()
+
+        assert "Постов: 12, 2 отсеяно стоп-словами" in text
+        assert "по исключениям" not in text
 
     def test_status_last_session_without_report_legacy(self, mock_config, mock_logger, tmp_path):
         """Сессия без отчёта (старая схема) — строка «Последняя» без «Постов» и «стоп»."""
