@@ -392,6 +392,36 @@ class TestVkBot:
             bot.run()
         assert mock_lp_cls.call_count == 2
 
+    def test_run_recaptures_on_transient_api_error(self, mock_config, mock_logger, tmp_path):
+        """Временная API-ошибка из check() (error 10) — переподключение, не выход."""
+        bot = self._bare_bot(mock_config, mock_logger, tmp_path)
+        error = VkApiError("[10] Internal server error")
+        error.code = 10
+        lp = MagicMock()
+        lp.check.side_effect = [error, KeyboardInterrupt]
+        with (
+            patch("vk_bot.vk_bot._DAEMON_LOCK", tmp_path / "bot.lock"),
+            patch("vk_bot.vk_bot.VkLongPoll", return_value=lp) as mock_lp_cls,
+        ):
+            bot.run()
+        assert mock_lp_cls.call_count == 2
+
+    def test_run_exits_on_api_error_invalid_token(self, mock_config, mock_logger, tmp_path):
+        """API-ошибка из check() с error 5 — фатально, выход."""
+        bot = self._bare_bot(mock_config, mock_logger, tmp_path)
+        error = VkApiError("[5] Invalid access token")
+        error.code = 5
+        lp = MagicMock()
+        lp.check.side_effect = error
+        with (
+            patch("vk_bot.vk_bot._DAEMON_LOCK", tmp_path / "bot.lock"),
+            patch("vk_bot.vk_bot.VkLongPoll", return_value=lp),
+        ):
+            bot.run()
+        lock = FileLock(tmp_path / "bot.lock")
+        assert lock.acquire()
+        lock.release()
+
     def test_connect_retries_on_error(self, mock_config, mock_logger, tmp_path):
         """_connect: ошибка захвата канала — сон и повтор, резидент не умирает."""
         bot = self._make_bot(mock_config, mock_logger, tmp_path)
