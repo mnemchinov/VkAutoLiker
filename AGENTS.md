@@ -135,7 +135,7 @@ python src/main.py tgbot    # Telegram-бот: резидентный long polli
 
 ```bash
 pytest                                  # полный прогон (browser-тесты требуют реальный Chrome)
-pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (326 passed, 3 deselected)
+pytest -m "not browser and not live"    # только юнит-тесты, быстрый прогон (328 passed, 3 deselected)
 pytest -m browser                       # тесты, требующие реальный Chrome
 pytest -m live                          # e2e-тесты на реальном посте VK
 pytest tests/test_settings.py -v        # конкретный файл
@@ -149,7 +149,7 @@ pytest --cov=src --cov-report=term-missing  # с покрытием (88%)
 - `tests/test_browser_fixture.py` (1 тест, маркер `browser`) поднимает локальный
   `http.server` на каталоге `tests/fixtures/` и крутит headless-Chrome против `vk_post.html`
   — единственный способ проверить DOM-селекторы лайка без обращения к VK.
-- Юнит-тесты на моках — 326 тестов, маркер не нужен.
+- Юнит-тесты на моках — 328 тестов, маркер не нужен.
 - Все пути к БД в тестах подменяются на `tmp_path` — реальный `vk_autoliker.db` не трогают.
 
 ### Проверка изменений (линтер: ruff)
@@ -418,8 +418,10 @@ pytest -m "not browser and not live"    # базовая страховка по
     `a_config` (ротация канала): `check()` падает `KeyError` на `response['updates']` —
     ловим и переподключаемся; ошибка одного события (сеть/`VkApiError` при отправке)
     логируется и не роняет цикл; недействительный токен (error 5) — чистый выход.
-    Сетевые ошибки и ошибки захвата канала — рандомная задержка и повтор
-    (резидент не должен умирать на старте).
+    Временные API-ошибки VK из `check()` (напр. error 10 — серверный сбой
+    на ротации канала) — переподключение без выхода, как сетевые; фатален
+    только error 5. Сетевые ошибки и ошибки захвата канала — рандомная
+    задержка и повтор (резидент не должен умирать на старте).
     **Inline-клавиатура и payload кнопок.** Каждый ответ `_send()` несёт
     `keyboard=_KEYBOARD_JSON` (inline, одна строка: Старт/Стоп/Статус, цвета
     positive/negative/primary). `payload` кнопки — **JSON-строка** `{"command": "..."}`
